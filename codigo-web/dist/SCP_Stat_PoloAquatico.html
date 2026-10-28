@@ -908,7 +908,7 @@ const fmtPct=(a,b)=>b?pct(a,b)+'%':'—';
    PWA — instalação no ecrã principal, funcionamento offline e atualizações.
    Só ativa na versão em pasta alojada num endereço https (tem <link rel="manifest">).
    ========================================================= */
-const APP_VERSION='522f419a6e';
+const APP_VERSION='ef6b4a940d';
 const pwa={deferred:null,reg:null,waiting:false};
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
 const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
@@ -1249,7 +1249,7 @@ function applyRecSnap(gid,docs){
  markSynced();
 }
 function onMetaSnap(snap){
- const S=syncState();let changed=false,removedCurrent=false;const toPull=[];
+ const S=syncState();let changed=false,removedCurrent=false;const toPull=[],arrived=[];const initial=!cloud.metaReady;
  snap.docChanges().forEach(c=>{
   const d=c.doc;if(d.metadata&&d.metadata.hasPendingWrites)return;
   const id=d.id,data=d.data();
@@ -1259,7 +1259,7 @@ function onMetaSnap(snap){
   }
   if(S.deleted.includes(id))return;
   let g=DB.games[id],isNew=false;
-  if(!g){g=newGame();g.id=id;g.demo=false;DB.games[id]=g;isNew=true;changed=true}
+  if(!g){g=newGame();g.id=id;g.demo=false;DB.games[id]=g;isNew=true;changed=true;arrived.push(id)}
   const synced=S.games[id]=S.games[id]||{};
   if(applyMeta(g,synced,data))changed=true;
   if(isNew)S.pushed[id]=g.updated;
@@ -1272,10 +1272,47 @@ function onMetaSnap(snap){
   toast('O jogo aberto foi apagado noutro dispositivo','warn');
  }
  saveSync(S);
+ // jogos novos da equipa: abrir sozinho se este dispositivo não tem jogo em curso, senão perguntar
+ if(arrived.length&&!removedCurrent){
+  const opened=tryAutoOpen(S,initial);
+  if(opened){changed=true;const i=toPull.indexOf(DB.currentId);if(i>=0)toPull.splice(i,1)}
+  else announceNewGames(arrived,initial);
+ }
  if(changed){save(true);cloudRerender()}
  toPull.forEach(pullGame);
  if(removedCurrent&&cloud.metaReady)listenCurrent();
  markSynced();
+}
+/** jogo local sem nada registado e nunca sincronizado (ou jogo de exemplo) */
+function isBlankLocal(g,S){
+ return !!g&&(g.demo||(!S.games[g.id]&&!g.individual.length&&!g.collective.length&&!g.timer.events.length&&!g.exclLog.length));
+}
+function teamGames(S){return Object.values(DB.games).filter(x=>!x.demo&&S.games[x.id]).sort((a,b)=>(b.created||0)-(a.created||0))}
+function gameLabel(g){return `${g.scpName||'SCP'} vs ${g.opponent||'Adversário'} (${fmtDate(g.date)})`}
+function tryAutoOpen(S,initial){
+ const cur=DB.games[DB.currentId];
+ if(!isBlankLocal(cur,S))return false;
+ const list=teamGames(S);if(!list.length)return false;
+ const g=list[0];
+ if(!initial&&Date.now()-(g.created||0)>24*3600e3)return false;
+ if(cur&&!cur.demo)delete DB.games[cur.id];           // jogo vazio deste dispositivo: não fica a ocupar espaço
+ DB.currentId=g.id;if(typeof resetLocalState==='function')resetLocalState();
+ toast((initial?'Aberto o jogo mais recente da equipa: ':'Novo jogo da equipa aberto: ')+gameLabel(g));
+ return true;
+}
+function announceNewGames(ids,initial){
+ const recent=ids.map(id=>DB.games[id]).filter(g=>g&&g.id!==DB.currentId&&Date.now()-(g.created||0)<(initial?2:24)*3600e3)
+  .sort((a,b)=>(b.created||0)-(a.created||0));
+ if(!recent.length)return;
+ const g=recent[0];
+ if($('#modal-root').firstElementChild){toast('Novo jogo da equipa: '+gameLabel(g)+'. Abre-o em Início › Jogos guardados.');return}
+ modal({title:'Novo jogo da equipa',body:`<p>Foi criado noutro dispositivo o jogo <b>${esc(gameLabel(g))}</b>.</p><p class="muted small">Abre-o aqui para registar no mesmo jogo que os outros dispositivos. Podes sempre mudar de jogo em Início › Jogos guardados.</p>`,
+  actions:[{label:'Agora não',cls:'btn-ghost',value:false},{label:'Abrir este jogo',cls:'btn-primary',value:true}]})
+ .then(ok=>{if(ok&&DB.games[g.id])openTeamGame(g.id)});
+}
+function openTeamGame(id){
+ DB.currentId=id;if(typeof resetLocalState==='function')resetLocalState();
+ save(true);rerender();toast('Jogo aberto: '+gameLabel(DB.games[id]));
 }
 async function pullGame(gid){
  const F=cloud.fb;if(!F||!cloud.user)return;
@@ -1348,15 +1385,30 @@ function cloudSyncNow(){
  const S=syncState();S.pushed={};saveSync(S);   // forçar comparação completa
  startSync();
 }
+/* Atualizar o ecrã quando chegam dados de outro dispositivo, sem apagar o que se está a preencher:
+   nos ecrãs de registo só se redesenham as tabelas/contadores, não os formulários. */
+const CLOUD_REFRESH={
+ coletiva:()=>renderColRecords(),
+ individual:()=>{renderIndForm();renderIndRecords()},
+ tempo:()=>{const cp=$('#t-cp');if(!cp||cp.textContent!==G().period+' período'){renderTempo();return}renderTempoSub();renderTempoPlayers();renderTempoLog();updateTempoLive()},
+ exclusoes:()=>{renderTeam('scp');renderTeam('opp');renderExLog()}
+};
 let cloudRerenderPending=false;
 function cloudRerender(){
  updateHeader();
+ if(cloudRerenderPending)return;
  const a=document.activeElement;
- if(a&&/INPUT|SELECT|TEXTAREA/.test(a.tagName)&&a.closest('main')){
-  if(!cloudRerenderPending){cloudRerenderPending=true;a.addEventListener('blur',()=>{cloudRerenderPending=false;setTimeout(rerender,50)},{once:true})}
+ if(a&&/INPUT|TEXTAREA/.test(a.tagName)&&a.type!=='checkbox'&&a.closest('main')){   // a escrever: esperar
+  cloudRerenderPending=true;a.addEventListener('blur',()=>{cloudRerenderPending=false;setTimeout(cloudRerender,50)},{once:true});
   return;
  }
- if($('#modal-root').firstElementChild)return;   // não fechar diálogos abertos
+ if($('#modal-root').firstElementChild){                                      // diálogo aberto: esperar que feche
+  cloudRerenderPending=true;
+  const iv=setInterval(()=>{if(!$('#modal-root').firstElementChild){clearInterval(iv);cloudRerenderPending=false;cloudRerender()}},400);
+  return;
+ }
+ const f=CLOUD_REFRESH[currentView];
+ if(f){try{f();return}catch(e){console.warn('Atualização parcial falhou',e)}}
  rerender();
 }
 
