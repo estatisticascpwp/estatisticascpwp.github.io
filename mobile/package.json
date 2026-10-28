@@ -1,0 +1,23 @@
+{
+  "name": "scp-stat-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "setup": "npx expo install --fix && npx expo install react-native-safe-area-context react-native-svg expo-sqlite expo-file-system expo-sharing expo-document-picker expo-font @expo-google-fonts/barlow @expo-google-fonts/barlow-condensed expo-haptics expo-keep-awake expo-splash-screen expo-status-bar",
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "typecheck": "tsc --noEmit",
+    "doctor": "npx expo-doctor@latest"
+  },
+  "dependencies": {
+    "expo": "~57.0.23",
+    "react": "19.2.3",
+    "react-native": "0.86.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~5.9.0"
+  }
+}

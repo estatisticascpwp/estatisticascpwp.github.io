@@ -1,0 +1,98 @@
+{
+ "id": "./",
+ "name": "SCP Stat · Polo Aquático",
+ "short_name": "SCP Stat",
+ "description": "Estatística de polo aquático do Sporting CP: registo ao vivo e análise pós-jogo.",
+ "lang": "pt-PT",
+ "dir": "ltr",
+ "start_url": "./index.html",
+ "scope": "./",
+ "display": "standalone",
+ "display_override": [
+  "standalone",
+  "minimal-ui"
+ ],
+ "background_color": "#004d2a",
+ "theme_color": "#004d2a",
+ "categories": [
+  "sports",
+  "productivity"
+ ],
+ "icons": [
+  {
+   "src": "icons/icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icons/icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icons/icon-maskable-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "maskable"
+  },
+  {
+   "src": "icons/icon-maskable-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ],
+ "shortcuts": [
+  {
+   "name": "Tempo de Jogo",
+   "url": "./tabela_tempo_jogo.html",
+   "icons": [
+    {
+     "src": "icons/shortcut-tempo.png",
+     "sizes": "96x96",
+     "type": "image/png"
+    }
+   ]
+  },
+  {
+   "name": "Estatística Individual",
+   "url": "./estatistica_individual.html",
+   "icons": [
+    {
+     "src": "icons/shortcut-individual.png",
+     "sizes": "96x96",
+     "type": "image/png"
+    }
+   ]
+  },
+  {
+   "name": "Exclusões",
+   "url": "./exclusoes.html",
+   "icons": [
+    {
+     "src": "icons/shortcut-exclusoes.png",
+     "sizes": "96x96",
+     "type": "image/png"
+    }
+   ]
+  }
+ ],
+ "screenshots": [
+  {
+   "src": "screenshots/wide.png",
+   "sizes": "1280x800",
+   "type": "image/png",
+   "form_factor": "wide",
+   "label": "Estatística Individual no tablet"
+  },
+  {
+   "src": "screenshots/narrow.png",
+   "sizes": "824x1784",
+   "type": "image/png",
+   "form_factor": "narrow",
+   "label": "Tempo de Jogo no telemóvel"
+  }
+ ]
+}
