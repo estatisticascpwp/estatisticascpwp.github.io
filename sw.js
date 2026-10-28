@@ -2,7 +2,7 @@
    - guarda todos os ficheiros da app no dispositivo (funciona sem internet)
    - guarda as fontes da Google na primeira utilização com rede
    - uma versão nova só é ativada quando o utilizador carrega em "Atualizar agora" */
-const VERSION = '82544d9f16';
+const VERSION = '522f419a6e';
 const APP_CACHE = 'scp-stat-app-' + VERSION;
 const FONT_CACHE = 'scp-stat-fonts';
 const PRECACHE = [
@@ -41,7 +41,8 @@ const PRECACHE = [
  "icons/shortcut-individual.png",
  "icons/shortcut-tempo.png"
 ];
-const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
+// fontes e biblioteca do Firebase (versão fixa no endereço, por isso a cache é segura)
+const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(APP_CACHE).then(c => c.addAll(PRECACHE.map(u => new Request(u, { cache: 'reload' })))));

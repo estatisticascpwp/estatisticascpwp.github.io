@@ -51,6 +51,7 @@ function renderHome(){
    </section>
    ${pwaStatus()==='installed'||pwaStatus()==='single'?'':`<section class="panel install-slot">${installCardHTML()}</section>`}
    <section class="panel">
+    ${cloudAvailable()?`<h2 class="sub">Base de dados da equipa</h2><div class="cloud-slot" style="margin:10px 0 18px">${cloudCardHTML()}</div>`:''}
     <h2 class="sub">Dados e cópias de segurança</h2>
     <p class="muted small" style="margin:6px 0 10px">Os registos ficam guardados automaticamente neste browser${storageOK?'':' <b style="color:var(--red)">(neste momento o browser está a bloquear o armazenamento — exporta antes de fechar)</b>'}. No fim de cada jogo, exporta o jogo completo para guardar uma cópia ou passá-lo para outro dispositivo.</p>
     <div class="btn-row"><button class="btn btn-outline" id="h-exp" type="button">${icon('download')}Exportar jogo (.json)</button><button class="btn btn-ghost" id="h-imp" type="button">${icon('upload')}Importar jogo</button></div>
@@ -76,7 +77,8 @@ function renderHome(){
  $('#h-sprints').onchange=e=>{const s=e.target.closest('[data-spp]');if(!s)return;g.sprints[+s.dataset.spp].player=s.value;save()};
  v.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{DB.currentId=b.dataset.open;save(true);resetLocalState();renderHome();toast('Jogo aberto')});
  v.querySelectorAll('[data-delg]').forEach(b=>b.onclick=async()=>{const x=DB.games[b.dataset.delg];
-  if(!await confirmBox('Apagar jogo',`Apagar o jogo de ${esc(fmtDate(x.date))} contra <b>${esc(x.opponent)}</b> e todos os seus registos? Não é possível desfazer.`,'Apagar jogo'))return;
+  if(!await confirmBox('Apagar jogo',`Apagar o jogo de ${esc(fmtDate(x.date))} contra <b>${esc(x.opponent)}</b> e todos os seus registos?${cloud.user&&!x.demo?' <b>Também é apagado para toda a equipa.</b>':''} Não é possível desfazer.`,'Apagar jogo'))return;
+  cloudGameDeleted(x.id);
   delete DB.games[x.id];
   if(!Object.keys(DB.games).length){const n=newGame();DB.games[n.id]=n;DB.currentId=n.id}
   else if(DB.currentId===x.id)DB.currentId=Object.keys(DB.games)[0];

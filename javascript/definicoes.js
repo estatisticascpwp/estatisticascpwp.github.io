@@ -29,6 +29,10 @@ function renderDefinicoes(){
  </section>
  <div class="set-grid">
   <section class="panel">
+   <h2 class="sub">Base de dados da equipa</h2>
+   <div class="cloud-slot" style="margin-top:10px">${cloudCardHTML()}</div>
+  </section>
+  <section class="panel">
    <h2 class="sub">Dados neste dispositivo</h2>
    <div class="store-meter" aria-hidden="true"><i style="width:${Math.min(100,Math.max(1,bytes*100/LIMIT))}%"></i></div>
    <p class="muted small" style="margin:0 0 12px">${(bytes/1024).toFixed(0)} KB usados de cerca de 5 MB disponíveis no browser · ${games.length} jogo(s) · ${recs} registo(s)${storageOK?'':' · <b style="color:var(--red)">o browser está a bloquear o armazenamento</b>'}</p>
@@ -56,9 +60,10 @@ function renderDefinicoes(){
  $('#st-restore').onclick=restoreBackup;
  $('#st-demo').onclick=()=>{const d=buildDemoGame();DB.games[d.id]=d;DB.currentId=d.id;save();resetLocalState();renderDefinicoes();toast('Jogo de exemplo adicionado e aberto')};
  $('#st-wipe').onclick=async()=>{
-  if(!await confirmBox('Apagar todos os dados',`Vais apagar <b>${games.length} jogo(s)</b> e todos os registos deste dispositivo. Faz antes uma cópia de segurança se precisares destes dados.`,'Continuar'))return;
+  if(!await confirmBox('Apagar todos os dados',`Vais apagar <b>${games.length} jogo(s)</b> e todos os registos deste dispositivo. Faz antes uma cópia de segurança se precisares destes dados.${cloud.user?'<br><br>Os jogos na base de dados da equipa <b>não</b> são apagados; este dispositivo fica desligado e pode voltar a ligar-se depois.':''}`,'Continuar'))return;
   const ok=await modal({title:'Confirmar',body:'<p>Escreve <b>APAGAR</b> para confirmar.</p><input id="m-conf" class="inp" autocomplete="off">',actions:[{label:'Cancelar',cls:'btn-ghost',value:false},{label:'Apagar tudo',cls:'btn-danger',get:r=>r.querySelector('#m-conf').value.trim().toUpperCase()==='APAGAR'}]});
   if(!ok){toast('Nada foi apagado.');return}
+  await cloudForgetDevice();
   const n=newGame();DB.games={[n.id]:n};DB.currentId=n.id;save();resetLocalState();renderDefinicoes();toast('Dados apagados. Começaste um jogo vazio.')};
 }
 async function restoreBackup(){

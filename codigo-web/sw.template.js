@@ -6,7 +6,8 @@ const VERSION = '__VERSION__';
 const APP_CACHE = 'scp-stat-app-' + VERSION;
 const FONT_CACHE = 'scp-stat-fonts';
 const PRECACHE = __PRECACHE__;
-const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
+// fontes e biblioteca do Firebase (versão fixa no endereço, por isso a cache é segura)
+const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(APP_CACHE).then(c => c.addAll(PRECACHE.map(u => new Request(u, { cache: 'reload' })))));

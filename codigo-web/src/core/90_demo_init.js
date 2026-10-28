@@ -65,6 +65,7 @@ function init(){
  });
  route();
  initPWA();
+ initCloud();
  setInterval(tick,250);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
 }

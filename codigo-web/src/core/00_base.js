@@ -95,6 +95,7 @@ function save(silent){
  try{localStorage.setItem(STORE_KEY,JSON.stringify(DB));storageOK=true}
  catch(e){storageOK=false;if(!saveWarned){saveWarned=true;toast('Este browser não está a guardar dados. Exporta regularmente para não perderes registos.','bad')}}
  updateHeader();
+ if(typeof cloudOnSave==='function')cloudOnSave();
 }
 
 /* ---------- Jogador ---------- */
@@ -104,7 +105,7 @@ const plabel=n=>n?`${n} · ${pname(n)}`:'—';
 const namedRoster=()=>G().roster.filter(p=>p.n<=13||p.name);
 
 /* ---------- Modal e avisos (sem alert/confirm do browser) ---------- */
-function modal({title,body,actions}){
+function modal({title,body,actions,onOpen}){
  return new Promise(res=>{
   const root=$('#modal-root');
   root.innerHTML=`<div class="modal-back"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><h3>${esc(title)}</h3><div class="modal-body">${body}</div><div class="modal-actions">${actions.map((a,i)=>`<button type="button" class="btn ${a.cls||''}" data-mi="${i}">${esc(a.label)}</button>`).join('')}</div></div></div>`;
@@ -115,6 +116,7 @@ function modal({title,body,actions}){
   back.addEventListener('click',e=>{if(e.target===back)close(null)});
   $$('[data-mi]',root).forEach(b=>b.onclick=()=>{const a=actions[+b.dataset.mi];const v=a.get?a.get(root):(a.value!==undefined?a.value:true);close(v)});
   const f=root.querySelector('input,select,[data-mi]:last-child'); if(f)f.focus();
+  if(onOpen)onOpen(root);
  });
 }
 function confirmBox(title,msg,ok='Confirmar',danger=true){return modal({title,body:`<p>${msg}</p>`,actions:[{label:'Cancelar',cls:'btn-ghost',value:false},{label:ok,cls:danger?'btn-danger':'btn-primary',value:true}]})}
@@ -199,6 +201,7 @@ function updateHeader(){
  $('#hdr-game').innerHTML=`<b>SCP ${sc.scp} – ${sc.opp} ${esc(g.opponent||'Adversário')}</b><span class="hg-sub">${esc(fmtDate(g.date))}${g.competition?' · '+esc(g.competition):''}</span>`;
  $$('#hdr-period button').forEach(b=>b.classList.toggle('on',b.dataset.p===g.period));
  $('#demo-banner').hidden=!g.demo;
+ if(typeof updateCloudUI==='function')updateCloudUI();
 }
 async function setPeriod(p){
  const g=G(); if(g.period===p)return;

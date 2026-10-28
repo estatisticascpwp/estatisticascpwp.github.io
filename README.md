@@ -28,10 +28,18 @@ App de estatística de polo aquático da equipa do Sporting CP: registo ao vivo 
 
 `codigo-web/make_icons.py` e `codigo-web/make_screens.py` regeneram os ícones e as capturas do diálogo de instalação (precisam do Playwright); só são necessários se o ícone ou o aspeto mudarem.
 
-## Dados
+## Dados e base de dados da equipa (Firebase)
 
-Neste momento os registos ficam **em cada dispositivo** (armazenamento do browser na PWA; SQLite na app móvel) e passam entre dispositivos com *Exportar/Importar jogo* (.json) ou cópia de segurança em *Definições*. Os ficheiros são compatíveis entre a PWA e a app móvel.
+A PWA trabalha sempre sobre uma cópia local (funciona sem rede) e sincroniza com o **Firestore** do projeto Firebase `scp-stat` (região Madrid):
 
-Próximo passo planeado: base de dados partilhada no **Firebase** (Firestore + contas da equipa), para vários dispositivos registarem o mesmo jogo em tempo real.
+- **Acesso:** uma única conta da equipa, `estatisticascpwp+app@gmail.com`. Cada dispositivo pede a palavra-passe uma vez. A palavra-passe muda-se na consola do Firebase (Authentication › Users) e não tem relação com a conta Google.
+- **Estrutura:** `jogos/{jogo}` guarda os dados gerais do jogo (adversário, plantel, relógio…) e `jogos/{jogo}/registos/{registo}` guarda cada registo (individual, coletivo, entrada/saída, exclusões, golos).
+- **Sincronização:** cada dispositivo envia só o que mudou e recebe em tempo real o que os outros mudaram. Edições de campos ou registos diferentes em dispositivos diferentes juntam-se; se o mesmo registo for alterado em dois sítios, fica a última alteração enviada.
+- **Sem rede:** os registos ficam no dispositivo e são enviados quando a ligação voltar.
+- **Jogos de exemplo** nunca são enviados. **Apagar um jogo** em Início apaga-o para toda a equipa; **apagar os dados do dispositivo** em Definições não apaga nada na base de dados.
+- A configuração do Firebase está em `codigo-web/src/core/85_cloud.js`. Não é secreta: o acesso aos dados está protegido pelas regras do Firestore (só a conta da equipa lê e escreve).
+- *Exportar/Importar jogo* (.json) e a cópia de segurança em *Definições* continuam disponíveis.
+
+A versão de ficheiro único e a app móvel (`mobile/`) ainda não estão ligadas à base de dados.
 
 Este repositório é público: o código e a app ficam visíveis, mas **nenhum dado dos jogos é guardado aqui**.

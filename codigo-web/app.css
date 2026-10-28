@@ -364,3 +364,17 @@ code.path{background:var(--soft);padding:1px 6px;border-radius:5px;font-size:13p
 @media (max-width:560px){.install-card{grid-template-columns:40px minmax(0,1fr)}.install-card .btn{grid-column:1/-1}.hdr-install{padding:6px 9px;font-size:13px}}
 .update-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:110;display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;background:var(--deep);color:#fff;padding:10px 12px 10px 16px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.28);font-weight:600;font-size:14px;width:max-content;max-width:calc(100vw - 32px)}
 html.standalone body{overscroll-behavior-y:none}
+
+/* base de dados da equipa */
+.hdr-cloud{display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(255,255,255,.35);background:rgba(0,0,0,.18);color:#fff;font:700 13px var(--f-display);letter-spacing:.5px;text-transform:uppercase;padding:7px 11px;border-radius:999px;min-height:36px;white-space:nowrap}
+.hdr-cloud .dot,.cloud-pill .dot{width:9px;height:9px;border-radius:50%;background:#9fb3ad;flex:none}
+.hdr-cloud.ok .dot,.cloud-pill.ok .dot{background:#4ade80}
+.hdr-cloud.busy .dot,.cloud-pill.busy .dot{background:var(--yellow);animation:cpulse 1s ease-in-out infinite}
+.hdr-cloud.warn .dot,.cloud-pill.warn .dot{background:#f59e0b}
+.hdr-cloud.bad .dot,.cloud-pill.bad .dot{background:#ff6b6b}
+.hdr-cloud.login{border-color:var(--yellow);color:var(--yellow)}
+.hdr-cloud.login .dot{background:var(--yellow)}
+@keyframes cpulse{50%{opacity:.35}}
+.cloud-pill{display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:999px;background:var(--soft);font-weight:700;font-size:13px}
+.cloud-pill.ok{background:var(--okbg);color:var(--ok)}.cloud-pill.warn,.cloud-pill.login{background:var(--warnbg);color:var(--warn)}.cloud-pill.bad{background:var(--badbg);color:var(--bad)}
+@media (max-width:560px){.hdr-cloud .cl-txt{display:none}.hdr-cloud{padding:7px 9px}}
