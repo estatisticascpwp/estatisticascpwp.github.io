@@ -31,6 +31,7 @@ const ICONS={
  edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/>',
  save:'<path d="M5 3h11l3 3v15H5zM8 3v5h7M8 21v-7h8v7"/>',
  reset:'<path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v5h5"/>',
+ board:'<rect x="3" y="4" width="18" height="14" rx="1.5"/><path d="M12 4v14M8 21h8"/><circle cx="7.5" cy="9" r="1.3"/><path d="M15 13.5l2.5-2.5M15 11h2.5v2.5"/>',
  plus:'<path d="M12 5v14M5 12h14"/>',
  play:'<path d="M7 4l13 8-13 8z"/>',
  pause:'<path d="M8 4v16M16 4v16"/>',
@@ -172,6 +173,7 @@ const VIEWS=[
  {id:'tempo',file:'tabela_tempo_jogo.html',label:'Tempo de Jogo',icon:'clock',render:()=>renderTempo()},
  {id:'exclusoes',file:'exclusoes.html',label:'Exclusões',icon:'card',render:()=>renderExclusoes()},
  {id:'analise',file:'interpretacao.html',label:'Interpretação',icon:'chart',render:()=>renderAnalise()},
+ {id:'taticas',file:'quadro_tatico.html',label:'Quadro Tático',icon:'board',render:()=>renderTaticas()},
  {id:'definicoes',file:'definicoes.html',label:'Definições',icon:'gear',render:()=>renderDefinicoes(),right:true}
 ];
 const MULTI=()=>!!document.body.dataset.page;
@@ -227,20 +229,6 @@ async function newGameFlow(){
  if(keep===null)return;
  const n=newGame(g,{keepRoster:keep}); DB.games[n.id]=n; DB.currentId=n.id; save(); resetLocalState();
  goTo('inicio'); toast('Novo jogo criado'); setTimeout(()=>$('#h-opp')&&$('#h-opp').focus(),50);
-}
-function exportGameJSON(){
- download('scp_stat_'+fileStamp()+'.json',JSON.stringify({app:'scp-stat-polo',version:1,exported:new Date().toISOString(),game:G()},null,1),'application/json');
-}
-async function importGameJSON(){
- const f=await pickFile('.json,application/json'); if(!f)return;
- let d; try{d=JSON.parse(f.text)}catch(e){toast('Este ficheiro não é um jogo exportado pela SCP Stat (.json).','bad');return}
- const game=d&&d.game; if(!game||d.app!=='scp-stat-polo'){toast('Este ficheiro não é um jogo exportado pela SCP Stat (.json).','bad');return}
- normalizeGame(game);
- if(DB.games[game.id]){
-  const m=await modal({title:'Jogo já existe',body:`<p>Já tens este jogo (${esc(fmtDate(game.date))} vs ${esc(game.opponent)}). Substituir o que está guardado ou importar como cópia?</p>`,actions:[{label:'Cancelar',cls:'btn-ghost',value:null},{label:'Importar como cópia',value:'copy'},{label:'Substituir',cls:'btn-danger',value:'replace'}]});
-  if(!m)return; if(m==='copy')game.id=uid();
- }
- DB.games[game.id]=game; DB.currentId=game.id; save(); resetLocalState(); rerender(); toast('Jogo importado e aberto');
 }
 function resetLocalState(){
  if(typeof ind!=='undefined')Object.assign(ind,{mode:'field',editing:null,period:null,player:null,action:null,sit:null,assist:null,f:null,g:null,showWarn:false,filters:{period:'',player:'',action:''}});

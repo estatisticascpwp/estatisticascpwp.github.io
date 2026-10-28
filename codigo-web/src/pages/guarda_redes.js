@@ -48,7 +48,7 @@ function renderGuardaRedes(){
   <section class="panel"><h3 class="mini">% de defesas por período</h3>${pctBars('period',PERIODS)}</section>
  </div>
  <section class="panel">
-  <div class="rec-head"><h2 class="sub">Comparação entre guarda-redes</h2><button type="button" class="btn btn-outline btn-sm" id="gr-exp">${icon('download')}Exportar CSV</button></div>
+  <div class="rec-head"><h2 class="sub">Comparação entre guarda-redes</h2></div>
   <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th class="l">Guarda-redes</th><th>À baliza</th><th>Defesas</th><th>Controladas</th><th>Para fora</th><th>Golos sofridos</th><th>Fora</th><th>% defesas</th><th>Tempo jogado</th><th>Golos / 8'</th></tr></thead><tbody id="gr-cmp"></tbody></table></div>
  </section>`;
  const cmp=gks.map(n=>{const s=grStats(all.filter(r=>r.player===n)),t=grs.period?0:(shifts[n]?.total||0);return {n,s,t}});
@@ -58,5 +58,5 @@ function renderGuardaRedes(){
  $('#grpitch-saved').innerHTML=markerGroup(rows,'f','#ffffff',2.4);
  $('#gr-p').onchange=e=>{grs.period=e.target.value;renderGuardaRedes()};
  $('#gr-who').onclick=e=>{const b=e.target.closest('[data-who]');if(!b)return;grs.who=b.dataset.who;renderGuardaRedes()};
- $('#gr-exp').onclick=()=>download('guarda_redes_'+fileStamp()+'.csv',toCSV([['Nº','Guarda-redes','Remates à baliza','Defesas','Defesas controladas','Defesas para fora','Golos sofridos','Remates fora','% defesas','Tempo jogado'],...cmp.map(({n,s,t})=>[n,pname(n),s.on,s.sv,s.hold,s.away,s.gl,s.out,s.on?pct(s.sv,s.on):'',grs.period?'':fmtClock(t)])]));
+ 
 }

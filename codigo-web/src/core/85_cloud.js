@@ -94,11 +94,11 @@ function applyMeta(g,synced,data){
 
 /* ---------- estado e armazenamento da sincronização ---------- */
 const cloud={fb:null,auth:null,db:null,user:null,state:'off',error:'',ready:false,metaReady:false,
- unsubMeta:null,unsubRecs:null,listenId:null,pushTimer:null,inflight:0,lastSync:0,authResolved:false,prompted:false};
+ unsubMeta:null,unsubRecs:null,unsubTact:null,tactReady:false,tactTimer:null,listenId:null,pushTimer:null,inflight:0,lastSync:0,authResolved:false,prompted:false};
 function syncState(){
  let s=null;try{s=JSON.parse(localStorage.getItem(SYNC_KEY)||'null')}catch(e){}
  if(!s||typeof s!=='object')s={};
- s.games=s.games||{};s.pushed=s.pushed||{};s.pull=s.pull||{};s.deleted=s.deleted||[];
+ s.games=s.games||{};s.pushed=s.pushed||{};s.pull=s.pull||{};s.deleted=s.deleted||[];s.tact=s.tact||{};
  return s;
 }
 function saveSync(s){try{localStorage.setItem(SYNC_KEY,JSON.stringify(s))}catch(e){}}
@@ -213,7 +213,7 @@ async function cloudLogout(){
  if(!await confirmBox('Desligar este dispositivo','Este dispositivo deixa de sincronizar com a equipa. Os jogos que já estão aqui ficam guardados, e os da equipa continuam na base de dados.<br><br>Para voltar a ligar é preciso a palavra-passe da equipa.','Desligar',false))return;
  stopSync();
  try{await cloud.fb.signOut(cloud.auth)}catch(e){}
- const S=syncState();S.games={};S.pushed={};S.pull={};S.deleted=[];saveSync(S);
+ const S=syncState();S.games={};S.pushed={};S.pull={};S.deleted=[];S.tact={};saveSync(S);
  toast('Dispositivo desligado da base de dados da equipa');
 }
 function cloudInfo(){modal({title:'Base de dados da equipa',body:`<div class="cloud-slot">${cloudCardHTML()}</div>`,actions:[{label:'Fechar',cls:'btn-primary',value:true}]})}
@@ -225,11 +225,14 @@ function startSync(){
  setCloudState(navigator.onLine===false?'offline':'syncing');
  cloud.ready=false;cloud.metaReady=false;
  cloud.unsubMeta=F.onSnapshot(F.collection(cloud.db,'jogos'),snap=>{onMetaSnap(snap);if(!cloud.metaReady){cloud.metaReady=true;listenCurrent();}},onCloudError);
+ cloud.tactReady=false;
+ cloud.unsubTact=F.onSnapshot(F.collection(cloud.db,'taticas'),snap=>{onTactSnap(snap);if(!cloud.tactReady){cloud.tactReady=true;pushTactics()}},onCloudError);
 }
 function stopSync(){
  if(cloud.unsubMeta){cloud.unsubMeta();cloud.unsubMeta=null}
  if(cloud.unsubRecs){cloud.unsubRecs();cloud.unsubRecs=null}
- cloud.listenId=null;cloud.ready=false;cloud.metaReady=false;
+ if(cloud.unsubTact){cloud.unsubTact();cloud.unsubTact=null}
+ cloud.listenId=null;cloud.ready=false;cloud.metaReady=false;cloud.tactReady=false;clearTimeout(cloud.tactTimer);
  clearTimeout(cloud.pushTimer);
 }
 function onCloudError(e){
@@ -407,7 +410,8 @@ const CLOUD_REFRESH={
  coletiva:()=>renderColRecords(),
  individual:()=>{renderIndForm();renderIndRecords()},
  tempo:()=>{const cp=$('#t-cp');if(!cp||cp.textContent!==G().period+' período'){renderTempo();return}renderTempoSub();renderTempoPlayers();renderTempoLog();updateTempoLive()},
- exclusoes:()=>{renderTeam('scp');renderTeam('opp');renderExLog()}
+ exclusoes:()=>{renderTeam('scp');renderTeam('opp');renderExLog()},
+ taticas:()=>{}           // o quadro não depende dos dados do jogo
 };
 let cloudRerenderPending=false;
 function cloudRerender(){
@@ -426,4 +430,39 @@ function cloudRerender(){
  const f=CLOUD_REFRESH[currentView];
  if(f){try{f();return}catch(e){console.warn('Atualização parcial falhou',e)}}
  rerender();
+}
+
+/* ---------- táticas do Quadro Tático (documento inteiro; fica a última alteração) ---------- */
+function onTactSnap(snap){
+ const S=syncState(),m=loadTactics();let changed=false;
+ snap.docChanges().forEach(c=>{
+  const d=c.doc;if(d.metadata&&d.metadata.hasPendingWrites)return;
+  const data=d.data(),id=d.id;
+  if(data.del){if(m[id]){delete m[id];changed=true}delete S.tact[id];return}
+  const remote=plain(stripCloud(data)),h=hashOf(remote);
+  if(S.tact[id]===h)return;
+  m[id]=remote;S.tact[id]=h;changed=true;
+ });
+ saveSync(S);
+ if(changed){saveTactics(m,true);if(typeof tacticsRemoteUpdate==='function')tacticsRemoteUpdate()}
+ markSynced();
+}
+function cloudTacticsChanged(){
+ if(!cloud.user)return;
+ clearTimeout(cloud.tactTimer);cloud.tactTimer=setTimeout(pushTactics,800);
+}
+function pushTactics(){
+ if(!cloud.user||!cloud.tactReady)return;
+ const F=cloud.fb,S=syncState(),m=loadTactics();let n=0;
+ Object.values(m).forEach(t=>{
+  const p=plain(t),h=hashOf(p);if(S.tact[t.id]===h)return;
+  S.tact[t.id]=h;n++;cloud.inflight++;
+  F.setDoc(F.doc(cloud.db,'taticas',t.id),{...p,del:false,upd:F.serverTimestamp()}).then(()=>{cloud.inflight--;markSynced()}).catch(e=>{cloud.inflight--;onCloudError(e)});
+ });
+ saveSync(S);if(n)markPending();
+}
+function cloudTacticDeleted(id){
+ const S=syncState();
+ if(cloud.user&&S.tact[id]){const F=cloud.fb;F.setDoc(F.doc(cloud.db,'taticas',id),{del:true,upd:F.serverTimestamp()},{merge:true}).catch(onCloudError)}
+ delete S.tact[id];saveSync(S);
 }

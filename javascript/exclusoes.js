@@ -8,11 +8,11 @@ function renderExclusoes(){
  v.innerHTML=`
  <section class="panel">
   <div class="view-head"><div><h1 class="title">Exclusões</h1><p>E1–E3: toca para marcar cada exclusão (tocar de novo numa marcada desfaz). Golos: toque soma 1; <b>Shift + clique</b> ou toque longo subtrai 1. Os nomes do SCP escritos aqui aparecem na Estatística Individual e no Tempo de Jogo.</p></div>
-   <div class="btn-row"><button type="button" class="btn btn-outline" id="ex-exp">${icon('download')}Exportar CSV</button><button type="button" class="btn btn-ghost" id="ex-imp">${icon('upload')}Importar CSV</button><button type="button" class="btn btn-danger" id="ex-reset">${icon('reset')}Repor contadores</button></div></div>
+   <div class="btn-row"><button type="button" class="btn btn-danger" id="ex-reset">${icon('reset')}Repor contadores</button></div></div>
   <div class="ex-grid"><div id="ex-scp"></div><div id="ex-opp"></div></div>
  </section>
  <section class="panel">
-  <div class="rec-head"><h2 class="sub">Registo detalhado</h2><button type="button" class="btn btn-outline btn-sm" id="ex-explog">${icon('download')}Exportar registo</button></div>
+  <div class="rec-head"><h2 class="sub">Registo detalhado</h2></div>
   <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Período</th><th>Relógio</th><th class="l">Equipa</th><th class="l">Jogador</th><th>Evento</th></tr></thead><tbody id="ex-log"></tbody></table></div>
  </section>`;
  renderTeam('scp');renderTeam('opp');renderExLog();
@@ -33,7 +33,7 @@ function renderExclusoes(){
   if(i.dataset.nm){const [t,n]=i.dataset.nm.split('|');if(t==='scp')player(+n).name=i.value.trim();else G().oppRoster[+n-1].name=i.value.trim();save(true)}
   if(i.dataset.team){if(i.dataset.team==='scp')G().scpName=i.value;else G().opponent=i.value;save(true);updateHeader()}});
  grid.addEventListener('change',()=>save());
- $('#ex-exp').onclick=exportExcl;$('#ex-imp').onclick=importExcl;$('#ex-explog').onclick=exportExLog;
+ 
  $('#ex-reset').onclick=async()=>{if(!await confirmBox('Repor contadores','Pôr a zero as exclusões, cartões vermelhos e golos das duas equipas? Os nomes mantêm-se.','Repor'))return;const g=G();g.excl={scp:{},opp:{}};g.exclLog=[];save();renderExclusoes();toast('Contadores a zero')};
 }
 function goalStep(key,d){const [t,n]=key.split('|'),o=exOf(t,+n);if(d<0&&o.goals===0)return;o.goals=Math.max(0,o.goals+d);exLog(t,+n,d>0?'Golo':'Golo anulado');save();renderTeam(t);renderExLog()}
@@ -54,26 +54,4 @@ function renderTeam(t){
 function renderExLog(){
  const g=G(),l=g.exclLog.slice().reverse();
  $('#ex-log').innerHTML=l.length?l.slice(0,120).map(e=>`<tr><td>${esc(e.period)}</td><td>${fmtClock(e.clock)}</td><td class="l">${esc(teamName(e.team))}</td><td class="l">${e.n} · ${esc(exName(e.team,e.n))}</td><td><span class="badge ${/^Golo$/.test(e.type)?'t-good':/vermelho$/.test(e.type)?'t-bad':/^Exclusão \d/.test(e.type)?'t-warn':'t-neutral'}">${esc(e.type)}</span></td></tr>`).join(''):'<tr><td class="empty" colspan="5">Os golos, exclusões e cartões aparecem aqui com o período e o tempo do relógio.</td></tr>';
-}
-function exportExcl(){
- const g=G(),rows=[['Equipa','Nº','Nome','GR','Exclusões','Cartão vermelho','Golos']];
- ['scp','opp'].forEach(t=>(t==='scp'?g.roster.slice(0,13):g.oppRoster).forEach(p=>{const o=exOf(t,p.n);rows.push([t==='scp'?'SCP':'Adversário',p.n,p.name,t==='scp'&&p.gr?'Sim':'',o.ex,o.red?'Sim':'',o.goals])}));
- rows.push([]);rows.push(['Nome equipa SCP',g.scpName]);rows.push(['Nome equipa adversária',g.opponent]);
- download('exclusoes_'+fileStamp()+'.csv',toCSV(rows));
-}
-function exportExLog(){
- const g=G();if(!g.exclLog.length){toast('Ainda não há eventos registados.','warn');return}
- download('exclusoes_registo_'+fileStamp()+'.csv',toCSV([['Período','Relógio','Equipa','Nº','Jogador','Evento','Hora'],...g.exclLog.map(e=>[e.period,fmtClock(e.clock),teamName(e.team),e.n,exName(e.team,e.n),e.type,new Date(e.ts).toLocaleString('pt-PT')])]));
-}
-async function importExcl(){
- const f=await pickFile('.csv,text/csv');if(!f)return;
- const rows=parseCSV(f.text);const objs=csvObjects(f.text).filter(o=>(o['Equipa']==='SCP'||o['Equipa']==='Adversário')&&o['Nº']);
- if(!objs.length){toast('Não encontrei jogadores. Usa um CSV exportado pelas Exclusões.','bad');return}
- if(!await confirmBox('Importar exclusões',`Substituir nomes, exclusões e golos pelos <b>${objs.length}</b> jogadores do ficheiro?`,'Importar',false))return;
- const g=G();g.excl={scp:{},opp:{}};
- objs.forEach(o=>{const t=o['Equipa']==='SCP'?'scp':'opp',n=+o['Nº'];if(!(n>=1&&n<=13))return;
-  if(t==='scp'){const p=player(n);p.name=o['Nome']||'';p.gr=o['GR']==='Sim'}else g.oppRoster[n-1].name=o['Nome']||'';
-  g.excl[t][n]={ex:clamp(+o['Exclusões']||0,0,3),red:o['Cartão vermelho']==='Sim',goals:Math.max(0,+o['Golos']||0)}});
- rows.forEach(r=>{if(r[0]==='Nome equipa SCP'&&r[1])g.scpName=r[1];if(r[0]==='Nome equipa adversária'&&r[1])g.opponent=r[1]});
- save();renderExclusoes();toast('Exclusões importadas');
 }
