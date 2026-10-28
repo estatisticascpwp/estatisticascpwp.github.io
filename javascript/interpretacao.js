@@ -83,7 +83,7 @@ function renderAnalise(){
   <section class="panel"><h3 class="mini">Golos sofridos pelo GR SCP</h3>${goalHeatSVG(conc,'#d93232')}<p class="muted small" style="margin:8px 0 0">${conc.length} golos sofridos com local registado.</p></section>
  </div>
  <section class="panel">
-  <div class="rec-head"><h2 class="sub">Resumo por jogador</h2><button type="button" class="btn btn-outline btn-sm" id="an-exp">${icon('download')}Exportar CSV</button></div>
+  <div class="rec-head"><h2 class="sub">Resumo por jogador</h2></div>
   <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th class="l">Jogador</th><th>Remates</th><th>Golos</th><th>Eficácia</th><th>Assist.</th><th>EXC ganhas</th><th>EXC sofridas</th><th>Perdas</th><th>Roubos</th><th>Blocos def.</th><th>Tempo jogado</th><th>Golos / 8'</th></tr></thead><tbody>
   ${pl.length?pl.map(p=>`<tr><td class="l">${esc(p.n+' · '+p.name)}</td><td>${p.shots}</td><td><b>${p.goals}</b></td><td>${p.shots?p.eff+'%':'—'}</td><td>${p.ast}</td><td>${p.excW}</td><td>${p.excL}</td><td>${p.lost}</td><td>${p.steal}</td><td>${p.blk}</td><td>${P?'—':fmtClock(p.secs)}</td><td>${p.g8!=null?p.g8.toFixed(1).replace('.',','):'—'}</td></tr>`).join(''):'<tr><td class="empty" colspan="12">Ainda sem registos de jogadores de campo.</td></tr>'}
   </tbody></table></div>
@@ -97,5 +97,5 @@ function renderAnalise(){
   <section class="panel"><h3 class="mini">Posição de remate · ataques SCP</h3>${barsHTML(effRows(groupBy(C.filter(r=>['scp','plus','caSCP'].includes(r.table)),'position'),r=>r.outcome==='GOLO').sort((a,b)=>COL_OPTS.positions.indexOf(a.k)-COL_OPTS.positions.indexOf(b.k)).map(x=>({label:x.k,v:x.e,x})),{max:100,fmt:i=>`${i.v}% <small>${i.x.g}/${i.x.n}</small>`})}</section>
  </div>`;
  $('#an-p').onchange=e=>{an.period=e.target.value;renderAnalise()};
- $('#an-exp').onclick=()=>{if(!pl.length){toast('Sem dados para exportar.','warn');return}download('interpretacao_jogadores_'+fileStamp()+'.csv',toCSV([['Nº','Jogador','Remates','Golos','Eficácia (%)','Assistências','EXC ganhas','EXC sofridas','Perdas','Roubos','Blocos defensivos','Tempo jogado','Golos por 8 min'],...pl.map(p=>[p.n,p.name,p.shots,p.goals,p.eff,p.ast,p.excW,p.excL,p.lost,p.steal,p.blk,P?'':fmtClock(p.secs),p.g8!=null?numPT(p.g8):''])]))};
+ 
 }

@@ -18,7 +18,7 @@ function renderJogadores(){
  v.innerHTML=`
  <section class="panel">
   <div class="view-head"><div><h1 class="title">Jogadores</h1><p>O plantel do SCP para este jogo. É o mesmo usado na Estatística Individual, Tempo de Jogo e Exclusões: altera aqui ou lá, fica igual em todo o lado.</p></div>
-   <div class="btn-row"><button type="button" class="btn btn-ghost" id="jg-copy">${icon('roster')}Copiar de outro jogo</button><button type="button" class="btn btn-outline" id="jg-exp">${icon('download')}Exportar plantel</button><button type="button" class="btn btn-ghost" id="jg-imp">${icon('upload')}Importar plantel</button></div></div>
+   <div class="btn-row"><button type="button" class="btn btn-ghost" id="jg-copy">${icon('roster')}Copiar de outro jogo</button></div></div>
   <div class="table-wrap"><table class="roster-tbl"><thead><tr><th>Nº</th><th class="l">Nome</th><th>GR</th><th class="l">Posição</th><th class="l">Mão</th><th>Remates</th><th>Golos</th><th>Tempo</th><th>Ficha</th></tr></thead><tbody id="jg-roster"></tbody></table></div>
   <p class="count">Os guarda-redes usam touca vermelha (nº 1 e 13 por defeito). Os nº 14 e 15 aparecem nos outros programas só depois de terem nome.</p>
  </section>
@@ -33,12 +33,8 @@ function renderJogadores(){
  tb.addEventListener('click',e=>{const gk=e.target.closest('[data-rgk]'),f=e.target.closest('[data-ficha]');
   if(gk){const p=player(+gk.dataset.rgk);p.gr=!p.gr;if(!p.gr&&p.pos==='Guarda-redes')p.pos='';if(p.gr&&!p.pos)p.pos='Guarda-redes';save();renderRosterRows();renderFicha()}
   if(f){jog.sel=+f.dataset.ficha;renderFicha();$('#jg-ficha').scrollIntoView({behavior:'smooth'})}});
- $('#jg-exp').onclick=()=>download('plantel_'+fileStamp()+'.csv',toCSV([['Nº','Nome','GR','Posição','Mão'],...g.roster.map(p=>[p.n,p.name,p.gr?'Sim':'',p.pos||'',p.hand||''])]));
- $('#jg-imp').onclick=async()=>{const f=await pickFile('.csv,text/csv');if(!f)return;const objs=csvObjects(f.text).filter(o=>+o['Nº']>=1&&+o['Nº']<=15);
-  if(!objs.length){toast('Não encontrei jogadores. Usa um CSV com as colunas Nº e Nome.','bad');return}
-  if(!await confirmBox('Importar plantel',`Substituir o plantel deste jogo pelos <b>${objs.length}</b> jogadores do ficheiro?`,'Importar',false))return;
-  const r=defaultRoster();objs.forEach(o=>{const p=r[+o['Nº']-1];p.name=o['Nome']||'';p.gr=o['GR']?/^s/i.test(o['GR']):p.gr;p.pos=POSITIONS.includes(o['Posição'])?o['Posição']:(p.gr?'Guarda-redes':'');p.hand=HANDS.includes(o['Mão'])?o['Mão']:''});
-  g.roster=r;save();renderJogadores();toast('Plantel importado')};
+ 
+ 
  $('#jg-copy').onclick=async()=>{const others=Object.values(DB.games).filter(x=>x.id!==g.id&&x.roster.some(p=>p.name));
   if(!others.length){toast('Não há outros jogos com plantel preenchido.','warn');return}
   const id=await modal({title:'Copiar plantel',body:`<p>Escolhe o jogo de onde copiar nomes, GR, posição e mão. Os registos deste jogo não mudam.</p><select id="m-game" class="inp">${others.sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(x=>`<option value="${x.id}">${esc(fmtDate(x.date))} · vs ${esc(x.opponent)}</option>`).join('')}</select>`,

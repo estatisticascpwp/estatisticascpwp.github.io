@@ -35,9 +35,8 @@ function renderDefinicoes(){
    <h2 class="sub">Dados neste dispositivo</h2>
    <div class="store-meter" aria-hidden="true"><i style="width:${Math.min(100,Math.max(1,bytes*100/LIMIT))}%"></i></div>
    <p class="muted small" style="margin:0 0 12px">${(bytes/1024).toFixed(0)} KB usados de cerca de 5 MB disponíveis no browser · ${games.length} jogo(s) · ${recs} registo(s)${storageOK?'':' · <b style="color:var(--red)">o browser está a bloquear o armazenamento</b>'}</p>
-   <div class="btn-row"><button type="button" class="btn btn-outline" id="st-backup">${icon('download')}Cópia de segurança de tudo</button><button type="button" class="btn btn-ghost" id="st-restore">${icon('upload')}Restaurar cópia</button></div>
-   <div class="btn-row" style="margin-top:8px"><button type="button" class="btn btn-ghost" id="st-demo">${icon('plus')}Adicionar jogo de exemplo</button><button type="button" class="btn btn-danger" id="st-wipe">${icon('trash')}Apagar todos os dados</button></div>
-   <p class="muted small" style="margin:12px 0 0">A cópia de segurança (.json) inclui todos os jogos e estas definições. Para um só jogo usa Início › Exportar jogo; para Excel, o Exportar CSV de cada página.</p>
+   <div class="btn-row"><button type="button" class="btn btn-ghost" id="st-demo">${icon('plus')}Adicionar jogo de exemplo</button><button type="button" class="btn btn-danger" id="st-wipe">${icon('trash')}Apagar todos os dados</button></div>
+   <p class="muted small" style="margin:12px 0 0">Exportar para Excel, cópia de segurança e importar ficheiros: <a href="${href('inicio')}">Início › Exportar dados</a>.</p>
   </section>
   <section class="panel">
    <h2 class="sub">Instalação</h2>
@@ -55,8 +54,8 @@ function renderDefinicoes(){
  $('#st-plen').onchange=e=>{DB.settings.periodLength=+e.target.value;save(true);toast('Duração para novos jogos: '+fmtClock(+e.target.value))};
  $('#st-gplen').onchange=e=>{g.periodLength=+e.target.value;if(!g.timer.running&&g.timer.remaining>g.periodLength)g.timer.remaining=g.periodLength;save();toast('Duração do período deste jogo: '+fmtClock(g.periodLength))};
  $('#st-pool').onchange=e=>{DB.settings.maxInPool=+e.target.value;save(true);toast('Máximo na água: '+e.target.value)};
- $('#st-backup').onclick=()=>download('scp_stat_copia_seguranca_'+todayISO()+'.json',JSON.stringify({app:'scp-stat-polo',version:1,kind:'backup',exported:new Date().toISOString(),settings:DB.settings,currentId:DB.currentId,games:DB.games}),'application/json');
- $('#st-restore').onclick=restoreBackup;
+ 
+ 
  $('#st-demo').onclick=()=>{const d=buildDemoGame();DB.games[d.id]=d;DB.currentId=d.id;save();resetLocalState();renderDefinicoes();toast('Jogo de exemplo adicionado e aberto')};
  $('#st-wipe').onclick=async()=>{
   if(!await confirmBox('Apagar todos os dados',`Vais apagar <b>${games.length} jogo(s)</b> e todos os registos deste dispositivo. Faz antes uma cópia de segurança se precisares destes dados.${cloud.user?'<br><br>Os jogos na base de dados da equipa <b>não</b> são apagados; este dispositivo fica desligado e pode voltar a ligar-se depois.':''}`,'Continuar'))return;
@@ -64,18 +63,4 @@ function renderDefinicoes(){
   if(!ok){toast('Nada foi apagado.');return}
   await cloudForgetDevice();
   const n=newGame();DB.games={[n.id]:n};DB.currentId=n.id;save();resetLocalState();renderDefinicoes();toast('Dados apagados. Começaste um jogo vazio.')};
-}
-async function restoreBackup(){
- const f=await pickFile('.json,application/json');if(!f)return;
- let d;try{d=JSON.parse(f.text)}catch(e){toast('Este ficheiro não é uma cópia da SCP Stat (.json).','bad');return}
- if(!d||d.app!=='scp-stat-polo'){toast('Este ficheiro não é uma cópia da SCP Stat (.json).','bad');return}
- const incoming=d.kind==='backup'?Object.values(d.games||{}):(d.game?[d.game]:[]);
- if(!incoming.length){toast('A cópia não tem jogos.','warn');return}
- const mode=await modal({title:'Restaurar cópia',body:`<p>A cópia tem <b>${incoming.length}</b> jogo(s). Juntar aos jogos deste dispositivo (os jogos iguais são atualizados) ou substituir tudo?</p>`,actions:[{label:'Cancelar',cls:'btn-ghost',value:null},{label:'Substituir tudo',cls:'btn-danger',value:'replace'},{label:'Juntar',cls:'btn-primary',value:'merge'}]});
- if(!mode)return;
- if(mode==='replace')DB.games={};
- incoming.forEach(x=>{normalizeGame(x);DB.games[x.id]=x});
- if(d.kind==='backup'&&d.settings&&mode==='replace')DB.settings={...DEFAULT_SETTINGS,...d.settings};
- DB.currentId=(d.currentId&&DB.games[d.currentId])?d.currentId:incoming[0].id;
- save();resetLocalState();rerender();toast(incoming.length+' jogo(s) restaurado(s)');
 }

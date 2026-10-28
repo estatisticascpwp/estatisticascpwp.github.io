@@ -21,6 +21,7 @@ PAGES = [  # id, ficheiro html, fonte, js de saída, título
     ('tempo', 'tabela_tempo_jogo.html', 'tempo', 'tabela_tempo_jogo.js', 'Tempo de Jogo'),
     ('exclusoes', 'exclusoes.html', 'exclusoes', 'exclusoes.js', 'Exclusões'),
     ('analise', 'interpretacao.html', 'analise', 'interpretacao.js', 'Sugestão de Interpretação'),
+    ('taticas', 'quadro_tatico.html', 'taticas', 'quadro_tatico.js', 'Quadro Tático'),
     ('definicoes', 'definicoes.html', 'definicoes', 'definicoes.js', 'Definições'),
 ]
 rd = lambda p: p.read_text(encoding='utf-8')

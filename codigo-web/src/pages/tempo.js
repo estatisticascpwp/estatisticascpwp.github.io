@@ -23,13 +23,13 @@ function renderTempo(){
  </section>
  <section class="panel sub-panel" id="t-sub"></section>
  <section class="panel">
-  <div class="rec-head"><h2 class="sub">Jogadores</h2><div class="btn-row"><button type="button" class="btn btn-outline" id="t-expsum">${icon('download')}Exportar resumo</button></div></div>
+  <div class="rec-head"><h2 class="sub">Jogadores</h2></div>
   <p class="muted small" style="margin:6px 0 12px">Os nomes são os mesmos da tabela de Exclusões; aqui podes ainda preencher os jogadores 14 e 15.</p>
   <div class="table-wrap"><table><thead><tr><th>Nº</th><th class="l">Jogador</th><th>Estado</th><th>Movimento</th><th>Turnos</th><th>Último turno</th><th>Tempo total</th><th class="l">Tempo jogado</th></tr></thead><tbody id="t-players"></tbody></table></div>
  </section>
  <section class="panel">
   <div class="rec-head"><h2 class="sub">Registo de substituições</h2>
-   <div class="btn-row"><button type="button" class="btn btn-outline" id="t-exp">${icon('download')}Exportar CSV</button><button type="button" class="btn btn-ghost" id="t-imp">${icon('upload')}Importar CSV</button><button type="button" class="btn btn-danger" id="t-delall">${icon('trash')}Apagar todos</button></div></div>
+   <div class="btn-row"><button type="button" class="btn btn-danger" id="t-delall">${icon('trash')}Apagar todos</button></div></div>
   <p class="muted small" style="margin:6px 0 12px">Podes corrigir o período ou o relógio de qualquer movimento; os turnos são recalculados. Movimentos marcados com "verificar" têm o relógio fora de ordem.</p>
   <div class="table-wrap"><table><thead><tr><th>Período</th><th>Relógio</th><th class="l">Jogador</th><th>Movimento</th><th>Apagar</th></tr></thead><tbody id="t-log"></tbody></table></div>
  </section>`;
@@ -56,7 +56,7 @@ function renderTempo(){
   if(el.dataset.f==='period')ev.period=el.value;else{const s=parseClock(el.value);if(s==null||s>g.periodLength){toast('Relógio inválido (mm:ss).','warn');el.value=fmtClock(ev.clock);return}ev.clock=s}
   save();renderTempoPlayers();renderTempoLog()});
  $('#t-log').addEventListener('click',async e=>{const b=e.target.closest('[data-delev]');if(!b)return;if(!await confirmBox('Apagar movimento','Apagar este movimento? Os turnos do jogador são recalculados.','Apagar'))return;g.timer.events=g.timer.events.filter(x=>x.id!==b.dataset.delev);save();renderTempoPlayers();renderTempoLog()});
- $('#t-exp').onclick=exportTempo;$('#t-imp').onclick=importTempo;$('#t-expsum').onclick=exportTempoSummary;
+ 
  $('#t-delall').onclick=async()=>{if(!g.timer.events.length){toast('Não há movimentos para apagar.');return}if(!await confirmBox('Apagar movimentos',`Apagar os <b>${g.timer.events.length}</b> movimentos de entrada e saída?`,'Apagar todos'))return;g.timer.events=[];save();renderTempoPlayers();renderTempoLog()};
  renderTempoSub();renderTempoPlayers();renderTempoLog();updateTempoLive();
 }
@@ -130,23 +130,4 @@ function updateTempoLive(){
   const tt=tr.querySelector('[data-k="total"]');if(tt)tt.innerHTML='<b>'+fmtClock(x.total)+'</b>';
   const cn=tr.querySelector('[data-k="count"]');if(cn)cn.textContent=x.count;
   const b=tr.querySelector('[data-k="bar"]');if(b)b.style.width=Math.min(100,x.total*100/max)+'%'});
-}
-function exportTempo(){
- const g=G(),ev=g.timer.events.slice().sort((a,b)=>absTime(a.period,a.clock)-absTime(b.period,b.clock)||a.seq-b.seq);
- if(!ev.length){toast('Não há movimentos para exportar.','warn');return}
- download('tempo_jogo_'+fileStamp()+'.csv',toCSV([['Período','Relógio','Nº','Jogador','Movimento'],...ev.map(e=>[e.period,fmtClock(e.clock),e.n,pname(e.n),e.type==='in'?'Entrada':'Saída'])]));
-}
-function exportTempoSummary(){
- const g=G(),s=computeShifts();
- download('tempo_jogo_resumo_'+fileStamp()+'.csv',toCSV([['Nº','Jogador','GR','Turnos','Último turno','Tempo total','Tempo total (s)'],...g.roster.filter(p=>s[p.n].count||p.name).map(p=>{const x=s[p.n];return [p.n,pname(p.n),p.gr?'Sim':'',x.count,x.count?fmtClock(x.last):'',fmtClock(x.total),Math.round(x.total)]})]));
-}
-async function importTempo(){
- const f=await pickFile('.csv,text/csv');if(!f)return;
- const objs=csvObjects(f.text).filter(o=>o['Nº']&&o['Movimento']);
- if(!objs.length){toast('Não encontrei movimentos. Usa um CSV exportado pelo Tempo de Jogo.','bad');return}
- const mode=await askImportMode(objs.length,'tempo de jogo');if(!mode)return;
- const g=G();let seq=g.timer.seq||0;
- const evs=objs.map(o=>{const n=+o['Nº'];if(!(n>=1&&n<=15))return null;const p=player(n);if(p&&!p.name&&o['Jogador']&&!/^Jogador \d+$/.test(o['Jogador']))p.name=o['Jogador'];
-  return {id:uid(),n,type:norm(o['Movimento']).startsWith('entr')?'in':'out',period:PERIODS.includes(o['Período'])?o['Período']:'1º',clock:parseClock(o['Relógio'])??0,seq:++seq,ts:Date.now()}}).filter(Boolean);
- g.timer.seq=seq;g.timer.events=mode==='replace'?evs:g.timer.events.concat(evs);save();renderTempo();toast(evs.length+' movimento(s) importado(s)');
 }

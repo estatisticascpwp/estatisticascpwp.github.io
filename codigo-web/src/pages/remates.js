@@ -44,7 +44,7 @@ function renderRemates(){
    </tbody></table></div></section>
  </div>
  <section class="panel">
-  <div class="rec-head"><h2 class="sub">Zona do campo × resultado</h2><button type="button" class="btn btn-outline btn-sm" id="rem-exp">${icon('download')}Exportar CSV</button></div>
+  <div class="rec-head"><h2 class="sub">Zona do campo × resultado</h2></div>
   <div class="table-wrap" style="margin-top:12px"><table class="mx"><thead><tr><th class="zl">Zona</th>${res.map(o=>`<th>${esc(o.label||o.id)}</th>`).join('')}<th>Total</th><th>% golo</th><th>% à baliza</th></tr></thead><tbody>
   ${FIELD_ZONES.map(z=>{const rs=byZone.get(z)||[];if(!rs.length)return '';const gg=rs.filter(isGoal).length;return `<tr><td class="zl">${esc(z)}</td>${res.map(o=>`<td>${heatCell(rs.filter(r=>r.action===o.id).length,maxCell,o.goal?'rgba(30,158,74,A)':'rgba(217,50,50,A)')}</td>`).join('')}<td><b>${rs.length}</b></td><td><b>${pct(gg,rs.length)}%</b></td><td>${fmtPct(rs.filter(isOn).length,rs.length)}</td></tr>`}).join('')||`<tr><td class="empty" colspan="${res.length+4}">Sem remates com estes filtros.</td></tr>`}
   </tbody></table></div>
@@ -62,6 +62,5 @@ function renderRemates(){
  $('#rem-s').onchange=e=>{rem.sit=e.target.value;renderRemates()};
  $('#rem-res').onclick=e=>{const b=e.target.closest('[data-res]');if(!b)return;const id=b.dataset.res;rem.res=rem.res.includes(id)?rem.res.filter(x=>x!==id):[...rem.res,id];renderRemates()};
  $('#rem-reset').onclick=()=>{Object.assign(rem,{period:'',player:'',sit:'',res:[]});renderRemates()};
- $('#rem-exp').onclick=()=>{if(!rows.length){toast('Sem remates para exportar.','warn');return}
-  download(`remates_${scp?'scp':'adversario'}_${fileStamp()}.csv`,toCSV([['Período',scp?'Nº Jogador':'Nº GR',scp?'Jogador':'Guarda-redes','Resultado','Situação','Zona Campo','Distância (m)','Zona Baliza'],...rows.map(r=>[r.period,r.player,pname(r.player),r.action,r.sit,r.fzone,r.fy!=null?numPT(r.fy*12.5):'',r.gzone])]))};
+ 
 }

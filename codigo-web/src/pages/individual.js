@@ -48,7 +48,7 @@ function renderIndividual(){
  </section>
  <section class="panel">
   <div class="rec-head"><h2 class="sub" id="ind-ttitle"></h2>
-   <div class="btn-row"><button type="button" class="btn btn-outline" id="ind-exp">${icon('download')}Exportar CSV</button><button type="button" class="btn btn-ghost" id="ind-imp">${icon('upload')}Importar CSV</button><button type="button" class="btn btn-danger" id="ind-delall">${icon('trash')}Apagar todos</button></div></div>
+   <div class="btn-row"><button type="button" class="btn btn-danger" id="ind-delall">${icon('trash')}Apagar todos</button></div></div>
   <div class="filters" id="ind-filters"></div>
   <div class="table-wrap"><table><thead id="ind-thead"></thead><tbody id="ind-tbody"></tbody></table></div>
   <p class="count" id="ind-count"></p>
@@ -70,8 +70,8 @@ function renderIndividual(){
  $('#goalsvg').addEventListener('click',e=>{const a=indDef();if(a&&!a.goal){toast(`"${a.id}" não regista local na baliza.`,'warn');return}ind.g=svgPoint($('#goalsvg'),e);renderIndForm()});
  $('#ind-save').onclick=indSave;
  $('#ind-cancel').onclick=()=>{resetIndForm();renderIndForm();renderIndRecords()};
- $('#ind-exp').onclick=exportIndividual;
- $('#ind-imp').onclick=importIndividual;
+ 
+ 
  $('#ind-delall').onclick=async()=>{const lbl=ind.mode==='gk'?'de guarda-redes':'de jogadores de campo';const n=G().individual.filter(r=>r.mode===ind.mode).length;if(!n){toast('Não há registos para apagar.');return}
   if(!await confirmBox('Apagar registos',`Apagar os <b>${n}</b> registos ${lbl} deste jogo? Não é possível desfazer.`,'Apagar todos'))return;
   G().individual=G().individual.filter(r=>r.mode!==ind.mode);resetIndForm();save();renderIndForm();renderIndRecords();toast('Registos apagados')};
@@ -155,24 +155,4 @@ function indSave(){
  if(prev)g.individual=g.individual.map(x=>x.id===rec.id?rec:x);else g.individual.push(rec);
  save();toast(prev?'Registo atualizado':`Guardado: ${plabel(rec.player)} · ${rec.action}`);
  resetIndForm();renderIndForm();renderIndRecords();
-}
-const IND_CSV=['Tipo','Período','Nº Jogador','Jogador','Ação','Situação','Assistência Nº','Assistência','Zona Campo','Campo X (%)','Campo Y (%)','Zona Baliza','Baliza X (%)','Baliza Y (%)','Registado em'];
-function exportIndividual(){
- const g=G(),rows=g.individual.slice().sort((a,b)=>a.ts-b.ts);
- if(!rows.length){toast('Não há registos para exportar.','warn');return}
- download('estatistica_individual_'+fileStamp()+'.csv',toCSV([IND_CSV,...rows.map(r=>[r.mode==='gk'?'GR':'Campo',r.period,r.player,pname(r.player),r.action,r.sit,r.assist==='none'?'':r.assist,r.assist==='none'?'Sem assistência':r.assist?pname(r.assist):'',r.fzone,numPT(r.fx*100),numPT(r.fy*100),r.gzone,r.gx!=null?numPT(r.gx*100):'',r.gy!=null?numPT(r.gy*100):'',new Date(r.ts).toLocaleString('pt-PT')])]));
-}
-async function importIndividual(){
- const f=await pickFile('.csv,text/csv');if(!f)return;
- const objs=csvObjects(f.text).filter(o=>o['Ação']&&o['Nº Jogador']);
- if(!objs.length){toast('Não encontrei registos. Usa um CSV exportado pela Estatística Individual.','bad');return}
- const mode=await askImportMode(objs.length,'estatística individual');if(!mode)return;
- const recs=objs.map((o,i)=>{const fx=parseNum(o['Campo X (%)']),fy=parseNum(o['Campo Y (%)']),gx=parseNum(o['Baliza X (%)']),gy=parseNum(o['Baliza Y (%)']);
-  const r={id:uid(),mode:o['Tipo']==='GR'?'gk':'field',period:PERIODS.includes(o['Período'])?o['Período']:'1º',player:+o['Nº Jogador'],playerName:o['Jogador']||'',action:o['Ação'],sit:o['Situação']||'',
-   assist:o['Assistência']==='Sem assistência'?'none':(o['Assistência Nº']?+o['Assistência Nº']:''),
-   fx:fx!=null?r3(fx/100):null,fy:fy!=null?r3(fy/100):null,gx:gx!=null?r3(gx/100):null,gy:gy!=null?r3(gy/100):null,ts:Date.now()+i};
-  r.fzone=r.fx!=null?fieldZone(r.fx,r.fy):(o['Zona Campo']||'');r.gzone=r.gx!=null?goalZone(r.gx,r.gy):(o['Zona Baliza']||'');
-  const p=player(r.player);if(p&&!p.name&&r.playerName)p.name=r.playerName;
-  return r});
- const g=G();g.individual=mode==='replace'?recs:g.individual.concat(recs);save();renderIndividual();toast(recs.length+' registo(s) importado(s)');
 }

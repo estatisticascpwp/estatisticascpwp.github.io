@@ -16,7 +16,7 @@ function renderColetiva(){
  </section>
  <section class="panel">
   <div class="rec-head"><h2 class="sub" id="col-title"></h2>
-   <div class="btn-row"><button type="button" class="btn btn-outline" id="col-exp">${icon('download')}Exportar CSV</button><button type="button" class="btn btn-ghost" id="col-imp">${icon('upload')}Importar CSV</button><button type="button" class="btn btn-danger" id="col-delall">${icon('trash')}Apagar todos</button></div></div>
+   <div class="btn-row"><button type="button" class="btn btn-danger" id="col-delall">${icon('trash')}Apagar todos</button></div></div>
   <div class="sumstrip" id="col-sum"></div>
   <div class="filters" id="col-filters"></div>
   <div class="table-wrap"><table><thead id="col-thead"></thead><tbody id="col-tbody"></tbody></table></div>
@@ -26,7 +26,7 @@ function renderColetiva(){
  $('#col-form').onsubmit=e=>{e.preventDefault();colSave()};
  $('#col-clear').onclick=()=>{col.editing=null;col.showWarn=false;col.timing='+10s';renderColForm();renderColRecords()};
  $('#col-fields').addEventListener('click',e=>{const b=e.target.closest('[data-time]');if(!b)return;col.timing=b.dataset.time;$$('[data-time]').forEach(x=>x.classList.toggle('on',x===b))});
- $('#col-exp').onclick=exportColetiva;$('#col-imp').onclick=importColetiva;
+ 
  $('#col-delall').onclick=async()=>{const t=colTable(),n=G().collective.filter(r=>r.table===t.id).length;if(!n){toast('Não há registos para apagar.');return}
   if(!await confirmBox('Apagar registos',`Apagar os <b>${n}</b> registos da tabela <b>${esc(t.title)}</b>?`,'Apagar todos'))return;
   G().collective=G().collective.filter(r=>r.table!==t.id);col.editing=null;save();renderColForm();renderColRecords();toast('Registos apagados')};
@@ -92,19 +92,4 @@ function renderColRecords(){
    return `<td>${esc(v||'—')}</td>`}).join('')}<td style="white-space:nowrap"><button type="button" class="rowbtn" data-edit="${r.id}" title="Editar">${icon('edit')}</button><button type="button" class="rowbtn del" data-del="${r.id}" title="Apagar">${icon('trash')}</button></td></tr>`).join('')
   :`<tr><td class="empty" colspan="${keys.length+2}">Ainda não há registos nesta tabela${Object.values(f).some(Boolean)?' com estes filtros':''}.</td></tr>`;
  $('#col-count').textContent=`${rows.length} registo(s) encontrado(s)`;
-}
-const COL_CSV=[['table','Tabela'],['period','Período'],['attack','Nº Ataque'],['offense','Jogada Ofensiva'],['defense','Jogada Defensiva / Defesa'],['system','Sistema +1'],['ca','Contra-ataque'],['position','Posição Remate'],['outcome','Outcome'],['timing','Tempo ATQ'],['notes','Notas']];
-function exportColetiva(){
- const rows=G().collective.slice().sort((a,b)=>COL_TABLES.findIndex(t=>t.id===a.table)-COL_TABLES.findIndex(t=>t.id===b.table)||a.period.localeCompare(b.period)||(+a.attack)-(+b.attack));
- if(!rows.length){toast('Não há registos para exportar.','warn');return}
- download('estatistica_coletiva_'+fileStamp()+'.csv',toCSV([COL_CSV.map(c=>c[1]),...rows.map(r=>COL_CSV.map(([k])=>k==='table'?(COL_TABLES.find(t=>t.id===r.table)||{}).title:r[k]||''))]));
-}
-async function importColetiva(){
- const f=await pickFile('.csv,text/csv');if(!f)return;
- const objs=csvObjects(f.text).filter(o=>o['Tabela']&&o['Outcome']!==undefined);
- if(!objs.length){toast('Não encontrei registos. Usa um CSV exportado pela Estatística Coletiva.','bad');return}
- const mode=await askImportMode(objs.length,'estatística coletiva');if(!mode)return;
- const recs=objs.map((o,i)=>{const t=COL_TABLES.find(x=>x.title===o['Tabela']||x.id===o['Tabela']||x.tab===o['Tabela']);if(!t)return null;
-  const r={id:uid(),table:t.id,ts:Date.now()+i};COL_CSV.slice(1).forEach(([k,h])=>{if(k==='table')return;if(k==='period'||k==='attack'||t.fields.some(x=>x[0]===k))r[k]=o[h]||''});if(t.fields.some(x=>x[0]==='timing')&&!r.timing)r.timing='+10s';return r}).filter(Boolean);
- const g=G();g.collective=mode==='replace'?recs:g.collective.concat(recs);save();renderColetiva();toast(recs.length+' registo(s) importado(s)');
 }

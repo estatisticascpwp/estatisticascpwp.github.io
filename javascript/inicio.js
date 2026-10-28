@@ -10,7 +10,8 @@ const PROGRAMS=[
  {id:'remates',icon:'target',name:'Remates',desc:'Mapa de todos os remates do SCP e do adversário, com eficácia por zona do campo e da baliza.',count:g=>g.individual.filter(r=>SHOT_ACTS.includes(r.action)&&r.mode==='field').length,unit:'remates'},
  {id:'jogadores',icon:'roster',name:'Jogadores',desc:'Plantel (nomes, GR, posição, mão) e ficha de cada jogador, com histórico entre jogos.',count:g=>g.roster.filter(p=>p.name).length,unit:'no plantel'},
  {id:'guardaredes',icon:'goal',name:'Guarda-Redes',desc:'% de defesas por zona da baliza, distância, situação e período, e comparação entre GR.',count:g=>g.individual.filter(r=>r.mode==='gk').length,unit:'ações'},
- {id:'analise',icon:'chart',name:'Sugestão de Interpretação',desc:'Leituras automáticas, mapas de eficácia por zona e por jogada, e resumo por jogador.',count:()=>null,unit:''}
+ {id:'analise',icon:'chart',name:'Sugestão de Interpretação',desc:'Leituras automáticas, mapas de eficácia por zona e por jogada, e resumo por jogador.',count:()=>null,unit:''},
+ {id:'taticas',icon:'board',name:'Quadro Tático',desc:'Quadro para desenhar e animar jogadas: ataque, defesa, superioridade e inferioridade, partilhado com a equipa.',count:()=>Object.keys(loadTactics()).length,unit:'táticas'}
 ];
 function renderHome(){
  const g=G(),sc=scoreOf(g),v=$('#view-inicio');
@@ -53,10 +54,9 @@ function renderHome(){
    ${pwaStatus()==='installed'||pwaStatus()==='single'?'':`<section class="panel install-slot">${installCardHTML()}</section>`}
    <section class="panel">
     ${cloudAvailable()?`<h2 class="sub">Base de dados da equipa</h2><div class="cloud-slot" style="margin:10px 0 18px">${cloudCardHTML()}</div>`:''}
-    <h2 class="sub">Dados e cópias de segurança</h2>
-    <p class="muted small" style="margin:6px 0 10px">Os registos ficam guardados automaticamente neste browser${storageOK?'':' <b style="color:var(--red)">(neste momento o browser está a bloquear o armazenamento — exporta antes de fechar)</b>'}. No fim de cada jogo, exporta o jogo completo para guardar uma cópia ou passá-lo para outro dispositivo.</p>
-    <div class="btn-row"><button class="btn btn-outline" id="h-exp" type="button">${icon('download')}Exportar jogo (.json)</button><button class="btn btn-ghost" id="h-imp" type="button">${icon('upload')}Importar jogo</button></div>
-    <ul class="store-list"><li>Cada programa tem também Exportar/Importar em CSV, compatível com Excel.</li><li>Usa sempre o mesmo browser no mesmo dispositivo; limpar os dados do browser apaga os registos.</li></ul>
+    <h2 class="sub">Exportar dados</h2>
+    <p class="muted small" style="margin:6px 0 12px">Os registos ficam guardados automaticamente${storageOK?'':' <b style="color:var(--red)">(neste momento o browser está a bloquear o armazenamento — exporta antes de fechar)</b>'}${cloudAvailable()?' e, com a base de dados ligada, também na base de dados da equipa':''}.</p>
+    ${dataPanelHTML()}
    </section>
   </div>
  </div>
@@ -72,8 +72,8 @@ function renderHome(){
  bind('h-opp','opponent');bind('h-date','date');bind('h-comp','competition');bind('h-venue','venue');
  $('#h-plen').addEventListener('change',e=>{g.periodLength=+e.target.value;if(!g.timer.running&&(g.timer.remaining>g.periodLength||g.timer.events.length===0))g.timer.remaining=g.periodLength;save();toast('Duração do período: '+fmtClock(g.periodLength))});
  $('#h-new').onclick=newGameFlow;
- $('#h-exp').onclick=exportGameJSON;
- $('#h-imp').onclick=importGameJSON;
+ 
+ 
  $('#h-sprints').onclick=e=>{const b=e.target.closest('[data-sp]');if(!b)return;const s=g.sprints[+b.dataset.sp];s.winner=s.winner===b.dataset.w?'':b.dataset.w;if(s.winner!=='SCP')s.player='';save();renderHome()};
  $('#h-sprints').onchange=e=>{const s=e.target.closest('[data-spp]');if(!s)return;g.sprints[+s.dataset.spp].player=s.value;save()};
  v.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{DB.currentId=b.dataset.open;save(true);resetLocalState();renderHome();toast('Jogo aberto')});

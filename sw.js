@@ -2,7 +2,7 @@
    - guarda todos os ficheiros da app no dispositivo (funciona sem internet)
    - guarda as fontes da Google na primeira utilização com rede
    - uma versão nova só é ativada quando o utilizador carrega em "Atualizar agora" */
-const VERSION = 'ef6b4a940d';
+const VERSION = '001218d85a';
 const APP_CACHE = 'scp-stat-app-' + VERSION;
 const FONT_CACHE = 'scp-stat-fonts';
 const PRECACHE = [
@@ -16,6 +16,7 @@ const PRECACHE = [
  "tabela_tempo_jogo.html",
  "exclusoes.html",
  "interpretacao.html",
+ "quadro_tatico.html",
  "definicoes.html",
  "css/scp_stat.css",
  "javascript/core.js",
@@ -28,6 +29,7 @@ const PRECACHE = [
  "javascript/tabela_tempo_jogo.js",
  "javascript/exclusoes.js",
  "javascript/interpretacao.js",
+ "javascript/quadro_tatico.js",
  "javascript/definicoes.js",
  "manifest.webmanifest",
  "icons/apple-touch-icon.png",
