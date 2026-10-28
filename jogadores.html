@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#004d2a">
+<title>SCP Stat · Jogadores</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&display=swap">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SCP Stat">
+<meta name="application-name" content="SCP Stat">
+<meta name="description" content="Estatística de polo aquático do Sporting CP: registo ao vivo e análise pós-jogo.">
+<link rel="stylesheet" href="css/scp_stat.css">
+</head>
+<body data-page="jogadores">
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="#inicio" aria-label="Início"><span class="crest">SCP</span><span><strong>SPORTING CP</strong><small>POLO AQUÁTICO</small></span></a>
+    <nav class="nav" id="nav" aria-label="Programas"></nav>
+    <div class="hdr-right">
+      <div class="hdr-game" id="hdr-game"></div>
+      <button type="button" class="hdr-install" id="hdr-install" hidden>Instalar</button>
+      <div class="hdr-settings" id="hdr-settings"></div>
+      <div class="seg-period" id="hdr-period" role="group" aria-label="Período atual"></div>
+    </div>
+  </div>
+</header>
+<div class="demo-banner" id="demo-banner" hidden>
+  <div class="db-in"><span><b>Jogo de exemplo.</b> Os dados que vês são fictícios, para experimentares a app. Podes apagá-lo depois em Início › Jogos guardados.</span><button class="btn btn-sm btn-green" id="demo-new" type="button">Começar jogo real</button></div>
+</div>
+<main id="main">
+  <section class="view" id="view-jogadores"></section>
+</main>
+<div id="modal-root"></div>
+<div class="toasts" id="toast-root" aria-live="polite"></div>
+<script src="javascript/core.js"></script>
+<script src="javascript/jogadores.js"></script>
+</body>
+</html>

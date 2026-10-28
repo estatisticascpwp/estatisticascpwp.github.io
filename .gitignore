@@ -1,0 +1,11 @@
+# app móvel
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/ios/
+mobile/android/
+# geral
+__pycache__/
+*.log
+.DS_Store
+Thumbs.db

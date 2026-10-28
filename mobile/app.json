@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "SCP Stat",
+    "slug": "scp-stat-polo",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#edf2f0",
+    "primaryColor": "#006633",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "pt.sporting.scpstat"
+    },
+    "android": {
+      "package": "pt.sporting.scpstat",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#004d2a"
+      }
+    },
+    "plugins": [
+      ["expo-splash-screen", { "image": "./assets/splash-icon.png", "imageWidth": 200, "resizeMode": "contain", "backgroundColor": "#004d2a" }],
+      "expo-sqlite",
+      "expo-font"
+    ]
+  }
+}
