@@ -46,15 +46,20 @@ function buildDemoGame(){
 }
 function exOfG(g,team,n){if(!g.excl[team][n])g.excl[team][n]={ex:0,red:false,goals:0};return g.excl[team][n]}
 
+/* Fim de período: o relógio fica em 0:00 sozinho (clockNow nunca desce abaixo de 0), sem gravar nada.
+   Gravar aqui fazia com que um dispositivo atrasado ou acabado de acordar enviasse para a equipa um relógio
+   antigo parado, por cima do relógio verdadeiro do dispositivo do Tempo de Jogo. */
+let endToastFor='';
 function tick(){
  const g=G();if(!g)return;const t=g.timer;
- if(t.running&&clockNow()<=0){t.remaining=0;t.running=false;save();toast(`Fim do ${g.period} período`,'warn')}
+ const key=g.id+'|'+g.period+'|'+t.startedAt;
+ if(t.running&&clockNow()<=0){if(endToastFor!==key){endToastFor=key;if(currentView==='tempo'||currentView==='inicio')toast(`Fim do ${g.period} período`,'warn')}}
  if(currentView==='tempo')updateTempoLive();
  if(currentView==='inicio'){const el=$('#sb-clock');if(el)el.textContent=fmtClock(clockNow())}
 }
 function init(){
  load();renderHeader();
- $('#demo-new').onclick=()=>{const n=newGame();DB.games[n.id]=n;DB.currentId=n.id;save();resetLocalState();goTo('inicio');toast('Jogo novo criado. Começa por escrever os nomes em Jogadores ou Exclusões.')};
+ $('#demo-new').onclick=()=>{const n=newGame(null,{escalao:DB.settings.lastEscalao});DB.games[n.id]=n;DB.currentId=n.id;save();resetLocalState();goTo('inicio');toast('Jogo novo criado. Começa por escrever os nomes em Jogadores ou Exclusões.')};
  window.addEventListener('hashchange',route);
  /* várias páginas/separadores abertos ao mesmo tempo: manter os dados sincronizados */
  window.addEventListener('storage',e=>{

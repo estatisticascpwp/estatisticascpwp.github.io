@@ -157,6 +157,8 @@ function bindCombo(root,opts){
 
 const maxPool=()=>S().maxInPool||7;
 function clockNow(){const t=G().timer;if(!t.running)return t.remaining;return Math.max(0,t.remaining-(Date.now()-t.startedAt)/1000)}
+/** relógio realmente a contar (a correr e acima de 0:00) */
+const clockRunning=()=>G().timer.running&&clockNow()>0;
 function absTime(period,clock){const L=G().periodLength;return Math.max(0,PERIODS.indexOf(period))*L+(L-clock)}
 function nowAbs(){return absTime(G().period,clockNow())}
 /* Quem está na água: decidido pela ORDEM em que os movimentos foram registados (seq),
@@ -222,3 +224,26 @@ const DIST_BANDS=[['0–2 m',0,2],['2–6 m',2,6],['6–12 m',6,12],['+12 m',12,
 const distBand=r=>{if(r.fy==null)return null;const m=r.fy*12.5;const b=DIST_BANDS.find(([,a,z])=>m>=a&&m<z);return b?b[0]:null};
 const heatCell=(v,max,color)=>v?`<span class="heat" style="background:${color.replace('A',(0.12+0.6*v/Math.max(1,max)).toFixed(2))}">${v}</span>`:'<span class="muted">·</span>';
 const fmtPct=(a,b)=>b?pct(a,b)+'%':'—';
+
+/* ---------- assistências (Golo e EXC ganha com "quem assistiu") ----------
+   Vários jogos: o jogador é reconhecido pelo nome (ou pelo número, se não tiver nome). */
+const astNum=a=>typeof a==='number'?a:(/^\d+$/.test(String(a??''))?+a:null);
+function assistStats(games,{period=''}={}){
+ const many=games.length>1,P=new Map(),pairs=new Map(),bySit=new Map(),byPer=new Map(PERIODS.map(p=>[p,{goals:0,ast:0,exc:0}]));
+ let goals=0,assisted=0,solo=0,unknown=0,excW=0,excA=0;
+ const keyOf=(g,n)=>{const p=g.roster.find(x=>x.n===+n);return many&&p&&p.name?'n:'+norm(p.name):'#'+n};
+ const get=(g,n)=>{const k=keyOf(g,n);if(!P.has(k)){const p=g.roster.find(x=>x.n===+n);P.set(k,{key:k,n:+n,name:p&&p.name?p.name:'Jogador '+n,gr:!!(p&&p.gr),ag:0,ae:0,goals:0})}return P.get(k)};
+ games.forEach(g=>(g.individual||[]).forEach(r=>{
+  if(r.mode!=='field'||(period&&r.period!==period))return;
+  const isG=r.action==='Golo',isE=r.action==='EXC ganha';if(!isG&&!isE)return;
+  const a=astNum(r.assist),bp=byPer.get(r.period);
+  if(isG){
+   goals++;const sc=get(g,r.player);sc.goals++;if(bp)bp.goals++;
+   const sit=r.sit||'Sem situação';if(!bySit.has(sit))bySit.set(sit,{goals:0,ast:0});bySit.get(sit).goals++;
+   if(a){assisted++;const as=get(g,a);as.ag++;bySit.get(sit).ast++;if(bp)bp.ast++;
+    const pk=as.key+'>'+sc.key;if(!pairs.has(pk))pairs.set(pk,{from:as,to:sc,v:0});pairs.get(pk).v++}
+   else if(r.assist==='none')solo++;else unknown++;
+  }else{excW++;if(a){excA++;get(g,a).ae++;if(bp)bp.exc++}}
+ }));
+ return {players:[...P.values()],pairs:[...pairs.values()],goals,assisted,solo,unknown,excW,excA,bySit,byPer,many};
+}

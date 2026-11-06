@@ -16,7 +16,7 @@ function renderAnalise(){
  const shifts=computeShifts();
 
  /* ---- jogadores ---- */
- const pl=g.roster.map(p=>{const mine=F.filter(r=>r.player===p.n),sh=mine.filter(r=>SHOT_ACTS.includes(r.action)),gl=sh.filter(r=>r.action==='Golo').length;
+ const pl=activeRoster(g).map(p=>{const mine=F.filter(r=>r.player===p.n),sh=mine.filter(r=>SHOT_ACTS.includes(r.action)),gl=sh.filter(r=>r.action==='Golo').length;
   const c=a=>mine.filter(r=>r.action===a).length;const secs=P?0:shifts[p.n].total;
   return {n:p.n,gr:p.gr,name:pname(p.n),shots:sh.length,goals:gl,eff:pct(gl,sh.length),ast:F.filter(r=>r.assist===p.n).length,excW:c('EXC ganha'),excL:c('EXC sofrida'),lost:c('Perda Bola')+c('Passe Falhado')+c('Falta Atacante'),steal:c('Roubo Bola'),blk:c('Bloco Defensivo'),secs,g8:secs>=60?(gl*480/secs):null,any:mine.length||secs>0}}).filter(x=>x.any&&!x.gr);
 

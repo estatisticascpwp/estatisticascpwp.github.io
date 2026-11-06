@@ -20,8 +20,11 @@ const CLOUD_CFG={
  }
 };
 const SYNC_KEY='scpStatPoloAquatico.sync.v1';
+/* Se a sincronização ficar presa (rede que parece ligada mas não chega à internet, como algumas redes de piscina),
+   ao fim deste tempo sem resposta do servidor é cancelada. Os registos ficam guardados no dispositivo. */
+const SYNC_TIMEOUT=(()=>{try{return +localStorage.getItem('scpStat.syncTimeoutMs')||25000}catch(e){return 25000}})();
 const CLOUD_DISMISS_KEY='scpStatPoloAquatico.cloudDismissed';
-const META_FIELDS=['scpName','opponent','date','competition','venue','period','periodLength','roster','oppRoster','timer','sprints','created','updated'];
+const META_FIELDS=['scpName','opponent','date','competition','venue','escalao','period','periodLength','roster','oppRoster','timer','sprints','created','updated'];
 
 /* ---------- funções puras (testadas fora do browser) ---------- */
 function stableStr(v){
@@ -94,7 +97,31 @@ function applyMeta(g,synced,data){
 
 /* ---------- estado e armazenamento da sincronização ---------- */
 const cloud={fb:null,auth:null,db:null,user:null,state:'off',error:'',ready:false,metaReady:false,
- unsubMeta:null,unsubRecs:null,unsubTact:null,tactReady:false,tactTimer:null,listenId:null,pushTimer:null,inflight:0,lastSync:0,authResolved:false,prompted:false};
+ unsubMeta:null,unsubRecs:null,unsubTact:null,tactReady:false,tactTimer:null,listenId:null,pushTimer:null,inflight:0,lastSync:0,authResolved:false,prompted:false,
+ gen:0,paused:false,busySince:0,lastProgress:0};
+const cloudBusy=()=>cloud.state==='connecting'||cloud.state==='syncing';
+/** resposta do servidor (não da cópia local): a sincronização está a avançar */
+function cloudProgress(snap){if(!snap||!snap.metadata||!snap.metadata.fromCache)cloud.lastProgress=Date.now()}
+/** envio acompanhado; se a sincronização for cancelada entretanto, a resposta tardia é ignorada */
+function cloudTrack(pr){
+ const gen=cloud.gen;cloud.inflight++;
+ pr.then(()=>{if(gen!==cloud.gen)return;cloud.inflight=Math.max(0,cloud.inflight-1);cloud.lastProgress=Date.now();markSynced()})
+  .catch(e=>{if(gen!==cloud.gen)return;cloud.inflight=Math.max(0,cloud.inflight-1);onCloudError(e)});
+}
+function cloudWatch(){
+ if(!cloudBusy()||cloud.paused)return;
+ const since=Math.max(cloud.busySince,cloud.lastProgress);
+ if(since&&Date.now()-since>SYNC_TIMEOUT)cloudCancel(true);
+}
+/** cancela a tentativa de sincronização: pára de escutar e de tentar enviar até o utilizador tentar outra vez */
+function cloudCancel(auto){
+ cloud.gen++;cloud.inflight=0;cloud.paused=true;
+ stopSync();
+ if(cloud.fb&&cloud.db&&cloud.fb.disableNetwork)cloud.fb.disableNetwork(cloud.db).catch(()=>{});
+ const secs=Math.round(SYNC_TIMEOUT/1000);
+ setCloudState('paused',auto?`A sincronização ficou ${secs} segundos sem resposta do servidor e foi cancelada. A rede pode estar ligada mas sem acesso à internet.`:'Sincronização cancelada.');
+ toast(auto?'Sincronização cancelada: sem resposta do servidor. Os registos ficam neste dispositivo.':'Sincronização cancelada. Os registos ficam neste dispositivo.','warn');
+}
 function syncState(){
  let s=null;try{s=JSON.parse(localStorage.getItem(SYNC_KEY)||'null')}catch(e){}
  if(!s||typeof s!=='object')s={};
@@ -107,7 +134,11 @@ const tsGt=(a,b)=>!b||a.s>b.s||(a.s===b.s&&a.n>b.n);
 const tsOf=u=>u&&typeof u.seconds==='number'?{s:u.seconds,n:u.nanoseconds||0}:null;
 
 /* ---------- estado visível ---------- */
-function setCloudState(st,err){cloud.state=st;if(err!==undefined)cloud.error=err;updateCloudUI()}
+function setCloudState(st,err){
+ const was=cloudBusy();cloud.state=st;if(err!==undefined)cloud.error=err;
+ if(cloudBusy()&&!was)cloud.busySince=Date.now();if(!cloudBusy())cloud.busySince=0;
+ updateCloudUI();
+}
 function cloudLabel(){
  switch(cloud.state){
   case 'login':return {t:'Ligar à equipa',c:'login'};
@@ -116,6 +147,7 @@ function cloudLabel(){
   case 'synced':return {t:'Sincronizado',c:'ok'};
   case 'offline':return {t:'Sem rede',c:'warn'};
   case 'error':return {t:'Erro na nuvem',c:'bad'};
+  case 'paused':return {t:'Sincronização parada',c:'warn'};
   default:return {t:'Só neste dispositivo',c:'off'};
  }
 }
@@ -136,11 +168,15 @@ function cloudCardHTML(){
   syncing:'A enviar e receber registos…',
   synced:`Ligado como ${esc(CLOUD_CFG.email)}. Última sincronização às ${when}.`,
   offline:'Sem ligação à internet. Os registos ficam guardados neste dispositivo e são enviados quando a rede voltar.',
-  error:esc(cloud.error||'Ocorreu um erro na sincronização.')
+  error:esc(cloud.error||'Ocorreu um erro na sincronização.'),
+  paused:esc(cloud.error||'Sincronização cancelada.')+' Os registos continuam guardados neste dispositivo e são enviados quando tentares outra vez.'
  }[cloud.state]||'';
- const btns=cloud.user
-  ?`<button type="button" class="btn btn-sm btn-outline" data-cloud="sync">Sincronizar agora</button><button type="button" class="btn btn-sm btn-ghost" data-cloud="logout">Desligar este dispositivo</button>`
-  :`<button type="button" class="btn btn-sm btn-primary" data-cloud="login">Ligar à base de dados</button>`;
+ const cancel=`<button type="button" class="btn btn-sm btn-danger" data-cloud="cancel">Cancelar sincronização</button>`;
+ const btns=cloud.state==='paused'
+  ?`<button type="button" class="btn btn-sm btn-primary" data-cloud="sync">Tentar outra vez</button>${cloud.user?`<button type="button" class="btn btn-sm btn-ghost" data-cloud="logout">Desligar este dispositivo</button>`:''}`
+  :cloud.user
+  ?`${cloudBusy()?cancel:`<button type="button" class="btn btn-sm btn-outline" data-cloud="sync">Sincronizar agora</button>`}<button type="button" class="btn btn-sm btn-ghost" data-cloud="logout">Desligar este dispositivo</button>`
+  :cloudBusy()?cancel:`<button type="button" class="btn btn-sm btn-primary" data-cloud="login">Ligar à base de dados</button>`;
  return `<div class="cloud-card"><span class="cloud-pill ${l.c}"><span class="dot"></span>${l.t}</span><p class="muted small" style="margin:8px 0 10px">${txt}${cloud.user?` · ${n} jogo(s) sincronizado(s) neste dispositivo.`:''}</p><div class="btn-row">${btns}</div>
   <p class="muted small" style="margin:10px 0 0">Os jogos de exemplo ficam só neste dispositivo. Apagar um jogo em Início apaga-o também para a equipa.</p></div>`;
 }
@@ -148,9 +184,10 @@ function cloudCardHTML(){
 /* ---------- arranque ---------- */
 async function initCloud(){
  document.addEventListener('click',e=>{const b=e.target.closest('[data-cloud]');if(!b)return;const a=b.dataset.cloud;
-  if(a==='login')cloudLogin();else if(a==='logout')cloudLogout();else if(a==='sync')cloudSyncNow()});
- const hb=$('#hdr-cloud');if(hb)hb.onclick=()=>{if(!cloud.user)cloudLogin();else cloudInfo()};
+  if(a==='login')cloudLogin();else if(a==='logout')cloudLogout();else if(a==='sync')cloudSyncNow();else if(a==='cancel')cloudCancel(false)});
+ const hb=$('#hdr-cloud');if(hb)hb.onclick=()=>{if(cloud.user||cloudBusy()||cloud.state==='paused')cloudInfo();else cloudLogin()};
  if(!cloudAvailable()){updateCloudUI();return}
+ setInterval(cloudWatch,2000);
  window.addEventListener('online',()=>{if(cloud.user)cloudSyncNow()});
  // ao mudar de página, enviar logo o que ficou à espera (a página seguinte também o faria)
  window.addEventListener('pagehide',()=>{if(cloud.user&&cloud.ready){clearTimeout(cloud.pushTimer);pushAll()}});
@@ -171,6 +208,7 @@ async function initCloud(){
  }
  cloud.fb.onAuthStateChanged(cloud.auth,user=>{
   cloud.authResolved=true;cloud.user=user||null;
+  if(cloud.paused){updateCloudUI();return}          // cancelada: só volta a tentar quando o utilizador pedir
   if(user){startSync()}
   else{stopSync();setCloudState('login');maybePromptLogin()}
  });
@@ -187,7 +225,8 @@ const AUTH_ERR={
  'auth/too-many-requests':'Demasiadas tentativas. Espera alguns minutos e tenta outra vez.',
  'auth/network-request-failed':'Sem ligação à internet. Tenta quando houver rede; a app continua a funcionar neste dispositivo.',
  'auth/unauthorized-domain':'Este endereço não está autorizado no Firebase (Authentication › Settings › Authorized domains).',
- 'auth/operation-not-allowed':'O início de sessão por email não está ativo no Firebase (Authentication › Sign-in method).'
+ 'auth/operation-not-allowed':'O início de sessão por email não está ativo no Firebase (Authentication › Sign-in method).',
+ 'app/timeout':'O servidor não respondeu em 20 segundos. A rede pode estar ligada mas sem acesso à internet. Tenta outra vez mais tarde; a app continua a funcionar neste dispositivo.'
 };
 async function cloudLogin(auto){
  if(!cloudAvailable()){modal({title:'Base de dados da equipa',body:cloudCardHTML(),actions:[{label:'Fechar',cls:'btn-primary',value:true}]});return}
@@ -205,8 +244,11 @@ async function cloudLogin(auto){
   if(pw==null){if(auto){try{localStorage.setItem(CLOUD_DISMISS_KEY,String(Date.now()))}catch(e){}}return}
   if(!pw){err='Escreve a palavra-passe.';continue}
   setCloudState('connecting');
-  try{await cloud.fb.signInWithEmailAndPassword(cloud.auth,CLOUD_CFG.email,pw);toast('Dispositivo ligado à base de dados da equipa');return}
-  catch(e){err=AUTH_ERR[e&&e.code]||('Não foi possível ligar ('+(e&&e.code||'erro')+').');setCloudState('login')}
+  cloud.paused=false;
+  if(cloud.fb.enableNetwork)await cloud.fb.enableNetwork(cloud.db).catch(()=>{});
+  const tmo=new Promise((_,rej)=>setTimeout(()=>rej({code:'app/timeout'}),20000));
+  try{await Promise.race([cloud.fb.signInWithEmailAndPassword(cloud.auth,CLOUD_CFG.email,pw),tmo]);toast('Dispositivo ligado à base de dados da equipa');return}
+  catch(e){err=AUTH_ERR[e&&e.code]||('Não foi possível ligar ('+(e&&e.code||'erro')+').');setCloudState(cloud.user?'synced':'login')}
  }
 }
 async function cloudLogout(){
@@ -222,11 +264,11 @@ function cloudInfo(){modal({title:'Base de dados da equipa',body:`<div class="cl
 function startSync(){
  stopSync();
  const F=cloud.fb;
- setCloudState(navigator.onLine===false?'offline':'syncing');
+ setCloudState(navigator.onLine===false?'offline':'syncing');cloud.busySince=Date.now();
  cloud.ready=false;cloud.metaReady=false;
- cloud.unsubMeta=F.onSnapshot(F.collection(cloud.db,'jogos'),snap=>{onMetaSnap(snap);if(!cloud.metaReady){cloud.metaReady=true;listenCurrent();}},onCloudError);
+ cloud.unsubMeta=F.onSnapshot(F.collection(cloud.db,'jogos'),snap=>{cloudProgress(snap);onMetaSnap(snap);if(!cloud.metaReady){cloud.metaReady=true;listenCurrent();}},onCloudError);
  cloud.tactReady=false;
- cloud.unsubTact=F.onSnapshot(F.collection(cloud.db,'taticas'),snap=>{onTactSnap(snap);if(!cloud.tactReady){cloud.tactReady=true;pushTactics()}},onCloudError);
+ cloud.unsubTact=F.onSnapshot(F.collection(cloud.db,'taticas'),snap=>{cloudProgress(snap);onTactSnap(snap);if(!cloud.tactReady){cloud.tactReady=true;pushTactics()}},onCloudError);
 }
 function stopSync(){
  if(cloud.unsubMeta){cloud.unsubMeta();cloud.unsubMeta=null}
@@ -251,7 +293,7 @@ function listenCurrent(){
  const col=F.collection(cloud.db,'jogos',gid,'registos');
  const q=p?F.query(col,F.where('upd','>',new F.Timestamp(p.s,p.n))):col;
  let first=true;
- cloud.unsubRecs=F.onSnapshot(q,snap=>{applyRecSnap(gid,snap.docChanges().map(c=>c.doc));if(first){first=false;cloud.ready=true;pushAll()}},onCloudError);
+ cloud.unsubRecs=F.onSnapshot(q,snap=>{cloudProgress(snap);applyRecSnap(gid,snap.docChanges().map(c=>c.doc));if(first){first=false;cloud.ready=true;pushAll()}},onCloudError);
 }
 function applyRecSnap(gid,docs){
  const g=DB.games[gid];if(!g)return;
@@ -384,22 +426,24 @@ function pushGame(g,S){
  for(let i=0;i<writes.length;i+=450){
   const b=F.writeBatch(cloud.db);
   writes.slice(i,i+450).forEach(([ref,data,opt])=>opt?b.set(ref,data,opt):b.set(ref,data));
-  cloud.inflight++;
-  b.commit().then(()=>{cloud.inflight--;markSynced()}).catch(e=>{cloud.inflight--;onCloudError(e)});
+  cloudTrack(b.commit());
  }
  S.games[g.id]=d.next;S.pushed[g.id]=g.updated;
  return writes.length;
 }
-function markPending(){if(cloud.user)setCloudState(navigator.onLine===false?'offline':'syncing')}
+function markPending(){if(cloud.user&&!cloud.paused)setCloudState(navigator.onLine===false?'offline':'syncing')}
 function markSynced(){
- if(!cloud.user||cloud.state==='error')return;
+ if(!cloud.user||cloud.state==='error'||cloud.paused)return;
  if(navigator.onLine===false){setCloudState('offline');return}
  if(cloud.inflight>0||!cloud.ready){setCloudState('syncing');return}
  cloud.lastSync=Date.now();setCloudState('synced');
 }
-function cloudSyncNow(){
- if(!cloud.user){cloudLogin();return}
- if(cloud.state==='error')cloud.error='';
+async function cloudSyncNow(){
+ if(!cloud.fb){location.reload();return}          // a ligação ao Firebase nem chegou a carregar: recomeçar
+ const wasPaused=cloud.paused;cloud.paused=false;
+ if(wasPaused&&cloud.fb.enableNetwork)await cloud.fb.enableNetwork(cloud.db).catch(()=>{});
+ if(!cloud.user){setCloudState('login','');cloudLogin();return}
+ cloud.error='';
  setCloudState('syncing');
  const S=syncState();S.pushed={};saveSync(S);   // forçar comparação completa
  startSync();
@@ -411,6 +455,7 @@ const CLOUD_REFRESH={
  individual:()=>{renderIndForm();renderIndRecords()},
  tempo:()=>{const cp=$('#t-cp');if(!cp||cp.textContent!==G().period+' período'){renderTempo();return}renderTempoSub();renderTempoPlayers();renderTempoLog();updateTempoLive()},
  exclusoes:()=>{renderTeam('scp');renderTeam('opp');renderExLog()},
+ assistencias:()=>renderAssistencias(),
  taticas:()=>{}           // o quadro não depende dos dados do jogo
 };
 let cloudRerenderPending=false;
@@ -456,8 +501,8 @@ function pushTactics(){
  const F=cloud.fb,S=syncState(),m=loadTactics();let n=0;
  Object.values(m).forEach(t=>{
   const p=plain(t),h=hashOf(p);if(S.tact[t.id]===h)return;
-  S.tact[t.id]=h;n++;cloud.inflight++;
-  F.setDoc(F.doc(cloud.db,'taticas',t.id),{...p,del:false,upd:F.serverTimestamp()}).then(()=>{cloud.inflight--;markSynced()}).catch(e=>{cloud.inflight--;onCloudError(e)});
+  S.tact[t.id]=h;n++;
+  cloudTrack(F.setDoc(F.doc(cloud.db,'taticas',t.id),{...p,del:false,upd:F.serverTimestamp()}));
  });
  saveSync(S);if(n)markPending();
 }

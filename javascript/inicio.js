@@ -8,21 +8,24 @@ const PROGRAMS=[
  {id:'tempo',icon:'clock',name:'Tempo de Jogo',desc:'Entradas e saídas em tempo real, turnos e tempo total por jogador (máx. 7 na água).',count:g=>g.timer.events.length,unit:'movimentos'},
  {id:'exclusoes',icon:'card',name:'Exclusões',desc:'Exclusões, cartão vermelho e golos das duas equipas. Os nomes do SCP alimentam os outros programas.',count:g=>Object.values(g.excl.scp).concat(Object.values(g.excl.opp)).reduce((a,x)=>a+(x.ex||0),0),unit:'exclusões'},
  {id:'remates',icon:'target',name:'Remates',desc:'Mapa de todos os remates do SCP e do adversário, com eficácia por zona do campo e da baliza.',count:g=>g.individual.filter(r=>SHOT_ACTS.includes(r.action)&&r.mode==='field').length,unit:'remates'},
- {id:'jogadores',icon:'roster',name:'Jogadores',desc:'Plantel (nomes, GR, posição, mão) e ficha de cada jogador, com histórico entre jogos.',count:g=>g.roster.filter(p=>p.name).length,unit:'no plantel'},
+ {id:'assistencias',icon:'assist',name:'Assistências',desc:'Quem assiste quem, assistências para golo e para exclusão, por situação e por período.',count:g=>g.individual.filter(r=>r.mode==='field'&&astNum(r.assist)).length,unit:'assistências'},
+ {id:'jogadores',icon:'roster',name:'Jogadores',desc:'Plantel do escalão (nomes, GR, posição, mão) e ficha de cada jogador, com histórico entre jogos do mesmo escalão.',count:g=>g.roster.filter(p=>p.name).length,unit:'no plantel'},
  {id:'guardaredes',icon:'goal',name:'Guarda-Redes',desc:'% de defesas por zona da baliza, distância, situação e período, e comparação entre GR.',count:g=>g.individual.filter(r=>r.mode==='gk').length,unit:'ações'},
  {id:'analise',icon:'chart',name:'Sugestão de Interpretação',desc:'Leituras automáticas, mapas de eficácia por zona e por jogada, e resumo por jogador.',count:()=>null,unit:''},
  {id:'taticas',icon:'board',name:'Quadro Tático',desc:'Quadro para desenhar e animar jogadas: ataque, defesa, superioridade e inferioridade, partilhado com a equipa.',count:()=>Object.keys(loadTactics()).length,unit:'táticas'}
 ];
+let homeEsc=(()=>{try{return localStorage.getItem('scpStat.home.esc')||''}catch(e){return ''}})();
 function renderHome(){
  const g=G(),sc=scoreOf(g),v=$('#view-inicio');
- const games=Object.values(DB.games).sort((a,b)=>String(b.date).localeCompare(String(a.date))||b.updated-a.updated);
+ if(homeEsc&&!ESC_IDS.includes(homeEsc))homeEsc='';
+ const allGames=Object.values(DB.games),games=allGames.filter(x=>!homeEsc||x.escalao===homeEsc).sort((a,b)=>String(b.date).localeCompare(String(a.date))||b.updated-a.updated);
  const won=g.sprints.filter(s=>s.winner==='SCP').length, played=g.sprints.filter(s=>s.winner).length;
  v.innerHTML=`
  <section class="panel home-hero">
   <div><p class="eyebrow">Sporting CP · Polo Aquático</p><h1 class="title">SCP Stat</h1>
    <p class="lead">Recolha de estatística ao vivo e análise pós-jogo. Funciona sem internet e guarda tudo automaticamente neste dispositivo.</p></div>
   <div class="scoreboard" aria-label="Resultado">
-   <div class="sb-team"><span>${esc(g.scpName||'Sporting CP')}</span><b>${sc.scp}</b></div>
+   <div class="sb-team"><span>${esc(g.scpName||'Sporting CP')} <small class="sb-esc">${esc(g.escalao)}</small></span><b>${sc.scp}</b></div>
    <div class="sb-mid">${g.period} período<small id="sb-clock">${fmtClock(clockNow())}</small></div>
    <div class="sb-team"><span>${esc(g.opponent||'Adversário')}</span><b>${sc.opp}</b></div>
   </div>
@@ -33,6 +36,7 @@ function renderHome(){
    <div class="rec-head"><h2 class="sub">Jogo atual</h2>
     <div class="btn-row"><button class="btn btn-primary" id="h-new" type="button">${icon('plus')}Novo jogo</button></div></div>
    <div class="game-form">
+    <div class="field"><label for="h-esc">Escalão</label><select id="h-esc">${ESCALOES.map(e=>`<option value="${e.id}" ${g.escalao===e.id?'selected':''}>${e.id} · ${e.size} jogadores</option>`).join('')}</select></div>
     <div class="field"><label for="h-opp">Adversário</label><input id="h-opp" value="${esc(g.opponent)}"></div>
     <div class="field"><label for="h-date">Data</label><input id="h-date" type="date" value="${esc(g.date)}"></div>
     <div class="field"><label for="h-comp">Competição</label><input id="h-comp" value="${esc(g.competition)}" placeholder="Ex.: Campeonato Nacional"></div>
@@ -62,9 +66,10 @@ function renderHome(){
  </div>
 
  <section class="panel">
-  <h2 class="sub">Jogos guardados</h2>
-  <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th class="l">Data</th><th class="l">Adversário</th><th class="l">Competição</th><th>Resultado</th><th>Registos</th><th>Ações</th></tr></thead><tbody>
-  ${games.map(x=>{const s=scoreOf(x);const n=x.individual.length+x.collective.length+x.timer.events.length;return `<tr><td class="l">${esc(fmtDate(x.date))}</td><td class="l">${esc(x.opponent)} ${x.id===DB.currentId?'<span class="cur-pill">aberto</span>':''}${x.demo?' <span class="cur-pill" style="background:var(--warnbg);color:var(--warn)">exemplo</span>':''}</td><td class="l">${esc(x.competition||'—')}</td><td>${s.scp} – ${s.opp}</td><td>${n}</td><td>${x.id===DB.currentId?'':`<button class="btn btn-sm btn-outline" data-open="${x.id}" type="button">Abrir</button> `}<button class="rowbtn del" data-delg="${x.id}" title="Apagar jogo" type="button">${icon('trash')}</button></td></tr>`}).join('')}
+  <div class="rec-head"><h2 class="sub">Jogos guardados</h2><div class="chips" id="h-escf">${['',...ESC_IDS].map(e=>{const n=e?allGames.filter(x=>x.escalao===e).length:allGames.length;return `<button type="button" class="chip ${homeEsc===e?'on':''}" data-escf="${e}">${e||'Todos'} <small>${n}</small></button>`}).join('')}</div></div>
+  <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th class="l">Data</th><th class="l">Escalão</th><th class="l">Adversário</th><th class="l">Competição</th><th>Resultado</th><th>Registos</th><th>Ações</th></tr></thead><tbody>
+  ${games.map(x=>{const s=scoreOf(x);const n=x.individual.length+x.collective.length+x.timer.events.length;return `<tr><td class="l">${esc(fmtDate(x.date))}</td><td class="l">${esc(x.escalao)}</td><td class="l">${esc(x.opponent)} ${x.id===DB.currentId?'<span class="cur-pill">aberto</span>':''}${x.demo?' <span class="cur-pill" style="background:var(--warnbg);color:var(--warn)">exemplo</span>':''}</td><td class="l">${esc(x.competition||'—')}</td><td>${s.scp} – ${s.opp}</td><td>${n}</td><td>${x.id===DB.currentId?'':`<button class="btn btn-sm btn-outline" data-open="${x.id}" type="button">Abrir</button> `}<button class="rowbtn del" data-delg="${x.id}" title="Apagar jogo" type="button">${icon('trash')}</button></td></tr>`}).join('')}
+  ${games.length?'':`<tr><td class="empty" colspan="7">Ainda não há jogos de ${esc(homeEsc)}.</td></tr>`}
   </tbody></table></div>
  </section>`;
 
@@ -72,6 +77,11 @@ function renderHome(){
  bind('h-opp','opponent');bind('h-date','date');bind('h-comp','competition');bind('h-venue','venue');
  $('#h-plen').addEventListener('change',e=>{g.periodLength=+e.target.value;if(!g.timer.running&&(g.timer.remaining>g.periodLength||g.timer.events.length===0))g.timer.remaining=g.periodLength;save();toast('Duração do período: '+fmtClock(g.periodLength))});
  $('#h-new').onclick=newGameFlow;
+ $('#h-esc').addEventListener('change',async e=>{const nv=e.target.value,old=g.escalao;
+  const lost=nv!==old&&rosterSize({escalao:nv})<rosterSize(g)&&(g.roster[MAX_ROSTER-1].name||g.individual.some(r=>r.player===MAX_ROSTER)||g.timer.events.some(x=>x.n===MAX_ROSTER));
+  if(lost&&!await confirmBox('Mudar de escalão',`O ${esc(nv)} tem ${rosterSize({escalao:nv})} jogadores. O nº 15 continua visível enquanto tiver nome ou registos.`,'Mudar',false)){e.target.value=old;return}
+  g.escalao=nv;DB.settings.lastEscalao=nv;save();renderHome();toast('Escalão do jogo: '+nv)});
+ $('#h-escf').onclick=e=>{const b=e.target.closest('[data-escf]');if(!b)return;homeEsc=b.dataset.escf;try{localStorage.setItem('scpStat.home.esc',homeEsc)}catch(err){}renderHome()};
  
  
  $('#h-sprints').onclick=e=>{const b=e.target.closest('[data-sp]');if(!b)return;const s=g.sprints[+b.dataset.sp];s.winner=s.winner===b.dataset.w?'':b.dataset.w;if(s.winner!=='SCP')s.player='';save();renderHome()};

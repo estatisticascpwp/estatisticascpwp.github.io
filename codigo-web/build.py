@@ -15,6 +15,7 @@ PAGES = [  # id, ficheiro html, fonte, js de saída, título
     ('inicio', 'index.html', 'inicio', 'inicio.js', 'Início'),
     ('individual', 'estatistica_individual.html', 'individual', 'estatistica_individual.js', 'Estatística Individual'),
     ('remates', 'remates.html', 'remates', 'remates.js', 'Remates'),
+    ('assistencias', 'assistencias.html', 'assistencias', 'assistencias.js', 'Assistências'),
     ('jogadores', 'jogadores.html', 'jogadores', 'jogadores.js', 'Jogadores'),
     ('guardaredes', 'guarda_redes.html', 'guarda_redes', 'guarda_redes.js', 'Guarda-Redes'),
     ('coletiva', 'estatistica_coletiva.html', 'coletiva', 'estatistica_coletiva.js', 'Estatística Coletiva'),

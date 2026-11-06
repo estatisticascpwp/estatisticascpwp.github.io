@@ -32,6 +32,7 @@ const ICONS={
  save:'<path d="M5 3h11l3 3v15H5zM8 3v5h7M8 21v-7h8v7"/>',
  reset:'<path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v5h5"/>',
  board:'<rect x="3" y="4" width="18" height="14" rx="1.5"/><path d="M12 4v14M8 21h8"/><circle cx="7.5" cy="9" r="1.3"/><path d="M15 13.5l2.5-2.5M15 11h2.5v2.5"/>',
+ assist:'<circle cx="5" cy="17" r="2.5"/><circle cx="19" cy="7" r="2.5"/><path d="M7.2 15.6C10 12 13 9.6 16.6 8.2"/><path d="M13.6 7.4l3 .8-.8 3"/>',
  plus:'<path d="M12 5v14M5 12h14"/>',
  play:'<path d="M7 4l13 8-13 8z"/>',
  pause:'<path d="M8 4v16M16 4v16"/>',
@@ -50,12 +51,26 @@ const icon=(n,cls='')=>`<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" s
 const DEFAULT_SETTINGS={teamName:'Sporting CP',periodLength:480,maxInPool:7,assistRequired:true,autoAttack:true,resetClockOnPeriod:true};
 const S=()=>(typeof DB!=='undefined'&&DB.settings)||DEFAULT_SETTINGS;
 const POSITIONS=['Guarda-redes','Pivot','Defesa-pivot','Ponta','Lateral','Central','Universal'];
-function defaultRoster(){return Array.from({length:15},(_,i)=>({n:i+1,name:'',gr:i===0||i===12,pos:i===0||i===12?'Guarda-redes':'',hand:''}))}
-function defaultOpp(){return Array.from({length:13},(_,i)=>({n:i+1,name:''}))}
+/* Escalões: cada um tem o seu plantel. Seniores com 14 jogadores, sub20 e abaixo com 15. */
+const ESCALOES=[{id:'Seniores A',size:14},{id:'Seniores B',size:14},{id:'Sub20',size:15},{id:'Sub18',size:15},{id:'Sub16',size:15},{id:'Sub14',size:15}];
+const ESC_IDS=ESCALOES.map(e=>e.id);
+const MAX_ROSTER=15;
+const rosterSize=g=>(ESCALOES.find(e=>e.id===(g&&g.escalao))||ESCALOES[0]).size;
+/** jogadores do escalão do jogo (mais algum número acima do limite que já tenha nome, para não esconder dados antigos) */
+const activeRoster=g=>g.roster.filter(p=>p.n<=rosterSize(g)||p.name);
+const activeOpp=g=>g.oppRoster.filter(p=>p.n<=rosterSize(g)||p.name);
+function defaultRoster(){return Array.from({length:MAX_ROSTER},(_,i)=>({n:i+1,name:'',gr:i===0||i===12,pos:i===0||i===12?'Guarda-redes':'',hand:''}))}
+function defaultOpp(){return Array.from({length:MAX_ROSTER},(_,i)=>({n:i+1,name:''}))}
+/** jogo mais recente de um escalão com plantel preenchido (para começar o próximo jogo com os mesmos jogadores) */
+function lastRosterGame(esc,exceptId){
+ return Object.values(DB.games).filter(x=>x.id!==exceptId&&!x.demo&&(x.escalao||'Seniores A')===esc&&x.roster.some(p=>p.name))
+  .sort((a,b)=>String(b.date).localeCompare(String(a.date))||(b.created||0)-(a.created||0))[0]||null;
+}
 function newGame(base,opts={}){
  const L=S().periodLength||480;
  return {
   id:uid(), scpName:S().teamName||'Sporting CP', opponent:'Adversário', date:todayISO(), competition:'', venue:'',
+  escalao:ESC_IDS.includes(opts.escalao)?opts.escalao:'Seniores A',
   period:'1º', periodLength:L,
   roster: base&&opts.keepRoster? base.roster.map(p=>({...p})) : defaultRoster(),
   oppRoster: defaultOpp(),
@@ -69,8 +84,9 @@ function newGame(base,opts={}){
 function normalizeGame(g){
  const b=newGame();
  for(const k of Object.keys(b)) if(g[k]===undefined||g[k]===null) g[k]=b[k];
- const r=defaultRoster(); (Array.isArray(g.roster)?g.roster:[]).forEach(p=>{if(p&&p.n>=1&&p.n<=15)r[p.n-1]={...r[p.n-1],...p}}); g.roster=r;
- const o=defaultOpp(); (Array.isArray(g.oppRoster)?g.oppRoster:[]).forEach(p=>{if(p&&p.n>=1&&p.n<=13)o[p.n-1]={...o[p.n-1],...p}}); g.oppRoster=o;
+ const r=defaultRoster(); (Array.isArray(g.roster)?g.roster:[]).forEach(p=>{if(p&&p.n>=1&&p.n<=MAX_ROSTER)r[p.n-1]={...r[p.n-1],...p}}); g.roster=r;
+ const o=defaultOpp(); (Array.isArray(g.oppRoster)?g.oppRoster:[]).forEach(p=>{if(p&&p.n>=1&&p.n<=MAX_ROSTER)o[p.n-1]={...o[p.n-1],...p}}); g.oppRoster=o;
+ if(!ESC_IDS.includes(g.escalao))g.escalao='Seniores A';
  g.timer={...b.timer,...g.timer}; if(!Array.isArray(g.timer.events))g.timer.events=[];
  g.excl=g.excl||{}; g.excl.scp=g.excl.scp||{}; g.excl.opp=g.excl.opp||{};
  if(!Array.isArray(g.sprints)||g.sprints.length!==4) g.sprints=b.sprints;
@@ -103,7 +119,7 @@ function save(silent){
 const player=n=>G().roster.find(p=>p.n===+n);
 const pname=n=>{const p=player(n);return p&&p.name?p.name:'Jogador '+n};
 const plabel=n=>n?`${n} · ${pname(n)}`:'—';
-const namedRoster=()=>G().roster.filter(p=>p.n<=13||p.name);
+const namedRoster=()=>activeRoster(G());
 
 /* ---------- Modal e avisos (sem alert/confirm do browser) ---------- */
 function modal({title,body,actions,onOpen}){
@@ -167,6 +183,7 @@ const VIEWS=[
  {id:'inicio',file:'index.html',label:'Início',icon:'home',render:()=>renderHome()},
  {id:'individual',file:'estatistica_individual.html',label:'Individual',icon:'player',render:()=>renderIndividual()},
  {id:'remates',file:'remates.html',label:'Remates',icon:'target',render:()=>renderRemates()},
+ {id:'assistencias',file:'assistencias.html',label:'Assistências',icon:'assist',render:()=>renderAssistencias()},
  {id:'jogadores',file:'jogadores.html',label:'Jogadores',icon:'roster',render:()=>renderJogadores()},
  {id:'guardaredes',file:'guarda_redes.html',label:'Guarda-Redes',icon:'goal',render:()=>renderGuardaRedes()},
  {id:'coletiva',file:'estatistica_coletiva.html',label:'Coletiva',icon:'team',render:()=>renderColetiva()},
@@ -200,35 +217,61 @@ function renderHeader(){
 function updateHeader(){
  const g=G(); if(!g||!$('#hdr-game'))return;
  const sc=scoreOf(g);
- $('#hdr-game').innerHTML=`<b>SCP ${sc.scp} – ${sc.opp} ${esc(g.opponent||'Adversário')}</b><span class="hg-sub">${esc(fmtDate(g.date))}${g.competition?' · '+esc(g.competition):''}</span>`;
+ $('#hdr-game').innerHTML=`<b>SCP ${sc.scp} – ${sc.opp} ${esc(g.opponent||'Adversário')}</b><span class="hg-sub">${esc(fmtDate(g.date))} · ${esc(g.escalao)}${g.competition?' · '+esc(g.competition):''}</span>`;
  $$('#hdr-period button').forEach(b=>b.classList.toggle('on',b.dataset.p===g.period));
  $('#demo-banner').hidden=!g.demo;
  if(typeof updateCloudUI==='function')updateCloudUI();
 }
 async function setPeriod(p){
  const g=G(); if(g.period===p)return;
+ const t=g.timer,left=clockNow(),inProgress=(t.running&&left>0)||(left>0&&left<g.periodLength);
+ if(inProgress&&!await confirmBox(`Mudar para o ${p} período?`,`O ${g.period} período ainda está a decorrer (relógio em <b>${fmtClock(left)}</b>${t.running&&left>0?', a correr':''}). Se mudares, o relógio pára e é reposto a ${fmtClock(g.periodLength)} no ${p} período.`,'Mudar de período',false))return;
  const later=g.timer.events.filter(e=>PERIODS.indexOf(e.period)>PERIODS.indexOf(p));
  if(later.length){
   const last=PERIODS[Math.max(...later.map(e=>PERIODS.indexOf(e.period)))];
   if(!await confirmBox('Voltar a um período anterior?',`Já há ${later.length} entrada(s)/saída(s) registadas até ao <b>${last} período</b>. Se voltares ao ${p} período e registares mais movimentos, os tempos de jogo ficam errados.<br><br>Para experimentar a app, cria antes um jogo novo em Início.`,'Mudar mesmo assim'))return;
  }
  g.period=p;
- if(S().resetClockOnPeriod){g.timer.running=false;g.timer.remaining=g.periodLength}
- save(); rerender(); toast(p+' período ativo'+(S().resetClockOnPeriod?' · relógio reposto a '+fmtClock(g.periodLength):''));
+ // relógio a 0:00 no período novo faria contar um período inteiro a mais: repor sempre nesse caso
+ const reset=S().resetClockOnPeriod||clockNow()<=0;
+ if(reset){g.timer.running=false;g.timer.remaining=g.periodLength}
+ save(); rerender(); toast(p+' período ativo'+(reset?' · relógio reposto a '+fmtClock(g.periodLength):''));
+}
+/* Resultado: os golos podem ser registados em vários programas (Individual, Guarda-Redes, Exclusões, Coletiva).
+   Para não contar o mesmo golo duas vezes, cada fonte é contada à parte e fica a maior:
+   SCP — por jogador, o maior entre os golos da Estatística Individual e os da tabela de Exclusões;
+   Adversário — o maior entre os golos sofridos (GR), os golos do adversário nas Exclusões e os da Coletiva. */
+const COL_ATT=['scp','plus','caSCP'],COL_DEF=['other','minus','caOther'];
+function scpGoalsByPlayer(g){
+ const m={},ind={};(g.individual||[]).forEach(r=>{if(r.mode==='field'&&r.action==='Golo'&&r.player)ind[r.player]=(ind[r.player]||0)+1});
+ const ex=(g.excl||{}).scp||{};
+ new Set([...Object.keys(ind),...Object.keys(ex)]).forEach(n=>{const v=Math.max(ind[n]||0,(ex[n]||{}).goals||0);if(v)m[n]=v});
+ return {total:m,ind};
 }
 function scoreOf(g){
- const sum=t=>Object.values(g.excl[t]||{}).reduce((a,x)=>a+(x.goals||0),0);
- return {scp:sum('scp'),opp:sum('opp')};
+ const col=g.collective||[],colG=tabs=>col.filter(r=>r.outcome==='GOLO'&&tabs.includes(r.table)).length;
+ const scpP=Object.values(scpGoalsByPlayer(g).total).reduce((a,b)=>a+b,0);
+ const oppEx=Object.values(((g.excl||{}).opp)||{}).reduce((a,x)=>a+(x.goals||0),0);
+ const oppGk=(g.individual||[]).filter(r=>r.mode==='gk'&&r.action==='Golo Sofrido').length;
+ return {scp:Math.max(scpP,colG(COL_ATT)),opp:Math.max(oppEx,oppGk,colG(COL_DEF))};
 }
 
 /* ---------- Gestão de jogos (partilhado) ---------- */
 async function newGameFlow(){
- const g=G();
- const keep=await modal({title:'Novo jogo',body:`<p>Cria um jogo vazio. O jogo atual fica guardado em "Jogos guardados".</p><label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="m-keep" ${g.demo?'':'checked'}> Manter o plantel do SCP (nomes e GR)</label>`,
-  actions:[{label:'Cancelar',cls:'btn-ghost',value:null},{label:'Criar jogo',cls:'btn-primary',get:r=>r.querySelector('#m-keep').checked}]});
- if(keep===null)return;
- const n=newGame(g,{keepRoster:keep}); DB.games[n.id]=n; DB.currentId=n.id; save(); resetLocalState();
- goTo('inicio'); toast('Novo jogo criado'); setTimeout(()=>$('#h-opp')&&$('#h-opp').focus(),50);
+ const g=G(),def=g&&!g.demo?g.escalao:(DB.settings.lastEscalao||'Seniores A');
+ const srcTxt=e=>{const src=lastRosterGame(e);const sz=(ESCALOES.find(x=>x.id===e)||ESCALOES[0]).size;
+  return src?`Usar o plantel de ${esc(e)} do último jogo (${esc(fmtDate(src.date))} vs ${esc(src.opponent)})`:`Ainda não há plantel de ${esc(e)}: começa com ${sz} jogadores sem nome`};
+ const res=await modal({title:'Novo jogo',body:`<p>Cria um jogo vazio. O jogo atual fica guardado em "Jogos guardados".</p>
+  <div class="field" style="margin-top:10px"><label for="m-esc">Escalão</label><select id="m-esc">${ESCALOES.map(e=>`<option value="${e.id}" ${e.id===def?'selected':''}>${e.id} · ${e.size} jogadores</option>`).join('')}</select></div>
+  <div class="field" style="margin-top:10px"><label for="m-opp">Adversário</label><input id="m-opp" placeholder="Ex.: SL Benfica"></div>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="m-keep" checked> <span id="m-keep-txt">${srcTxt(def)}</span></label>`,
+  onOpen:r=>{const s=r.querySelector('#m-esc'),t=r.querySelector('#m-keep-txt'),k=r.querySelector('#m-keep');const upd=()=>{t.innerHTML=srcTxt(s.value);const has=!!lastRosterGame(s.value);k.disabled=!has;k.checked=has};s.onchange=upd;upd()},
+  actions:[{label:'Cancelar',cls:'btn-ghost',value:null},{label:'Criar jogo',cls:'btn-primary',get:r=>({esc:r.querySelector('#m-esc').value,opp:r.querySelector('#m-opp').value.trim(),keep:r.querySelector('#m-keep').checked})}]});
+ if(!res)return;
+ const src=res.keep?lastRosterGame(res.esc):null;
+ const n=newGame(src,{keepRoster:!!src,escalao:res.esc}); if(res.opp)n.opponent=res.opp;
+ DB.games[n.id]=n; DB.currentId=n.id; DB.settings.lastEscalao=res.esc; save(); resetLocalState();
+ goTo('inicio'); toast(`Novo jogo criado · ${res.esc}`); if(!res.opp)setTimeout(()=>$('#h-opp')&&$('#h-opp').focus(),50);
 }
 function resetLocalState(){
  if(typeof ind!=='undefined')Object.assign(ind,{mode:'field',editing:null,period:null,player:null,action:null,sit:null,assist:null,f:null,g:null,showWarn:false,filters:{period:'',player:'',action:''}});

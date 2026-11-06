@@ -25,7 +25,7 @@ function renderTempo(){
  <section class="panel sub-panel" id="t-sub"></section>
  <section class="panel">
   <div class="rec-head"><h2 class="sub">Jogadores</h2></div>
-  <p class="muted small" style="margin:6px 0 12px">Os nomes são os mesmos da tabela de Exclusões; aqui podes ainda preencher os jogadores 14 e 15.</p>
+  <p class="muted small" style="margin:6px 0 12px">Os nomes são os mesmos da tabela de Exclusões e de Jogadores (${rosterSize(g)} jogadores no escalão ${esc(g.escalao)}).</p>
   <div class="table-wrap"><table><thead><tr><th>Nº</th><th class="l">Jogador</th><th>Estado</th><th>Movimento</th><th>Turnos</th><th>Último turno</th><th>Tempo total</th><th class="l">Tempo jogado</th></tr></thead><tbody id="t-players"></tbody></table></div>
  </section>
  <section class="panel">
@@ -34,34 +34,37 @@ function renderTempo(){
   <p class="muted small" style="margin:6px 0 12px">Podes corrigir o período ou o relógio de qualquer movimento; os turnos são recalculados. Movimentos marcados com "verificar" têm o relógio fora de ordem.</p>
   <div class="table-wrap"><table><thead><tr><th>Período</th><th>Relógio</th><th class="l">Jogador</th><th>Movimento</th><th>Apagar</th></tr></thead><tbody id="t-log"></tbody></table></div>
  </section>`;
- const t=g.timer;
+ /* os botões leem sempre o jogo e o relógio atuais: o objeto do relógio é substituído quando chegam dados de outro dispositivo */
+ const T=()=>G().timer;
  const cur=Math.round(clockNow());$('#t-min').value=String(Math.floor(cur/60));$('#t-sec').value=String(cur%60);
- $('#t-play').onclick=()=>{if(t.running){t.remaining=clockNow();t.running=false}else{if(clockNow()<=0){toast('O relógio está a 0:00. Muda de período ou acerta o relógio.','warn');return}t.running=true;t.startedAt=Date.now()}save();updateTempoLive()};
- const shift=d=>{t.remaining=clamp(clockNow()+d,0,g.periodLength);if(t.running)t.startedAt=Date.now();save();updateTempoLive()};
+ $('#t-play').onclick=()=>{if(clockRunning()){T().remaining=clockNow();T().running=false}else{if(clockNow()<=0){T().remaining=0;T().running=false;save();updateTempoLive();toast('O relógio está a 0:00. Começa o próximo período ou acerta o relógio.','warn');return}T().remaining=clockNow();T().running=true;T().startedAt=Date.now()}save();updateTempoLive()};
+ const shift=d=>{T().remaining=clamp(clockNow()+d,0,G().periodLength);if(T().running)T().startedAt=Date.now();save();updateTempoLive()};
  $('#t-m5').onclick=()=>shift(-5);$('#t-p5').onclick=()=>shift(5);
  $('#t-full').onclick=async()=>{
-  if(g.timer.events.some(e=>e.period===g.period&&e.clock<g.periodLength)&&!await confirmBox('Repor o relógio?',`Já há movimentos no ${g.period} período. Repor o relógio a ${fmtClock(g.periodLength)} <b>no mesmo período</b> faz com que os próximos movimentos fiquem antes desses. Se o período acabou, usa "Começar o próximo período".`,'Repor mesmo assim'))return;
-  t.running=false;t.remaining=g.periodLength;save();renderTempo()};
- $('#t-next').onclick=()=>{const i=PERIODS.indexOf(g.period);if(i<PERIODS.length-1)setPeriod(PERIODS[i+1])};
+  if(G().timer.events.some(e=>e.period===G().period&&e.clock<G().periodLength)&&!await confirmBox('Repor o relógio?',`Já há movimentos no ${G().period} período. Repor o relógio a ${fmtClock(G().periodLength)} <b>no mesmo período</b> faz com que os próximos movimentos fiquem antes desses. Se o período acabou, usa "Começar o próximo período".`,'Repor mesmo assim'))return;
+  T().running=false;T().remaining=G().periodLength;save();renderTempo()};
+ $('#t-next').onclick=()=>{const i=PERIODS.indexOf(G().period);if(i<PERIODS.length-1)setPeriod(PERIODS[i+1])};
  $('#t-sub').addEventListener('click',e=>{const b=e.target.closest('[data-sub]');
   if(b){const [k,n]=b.dataset.sub.split('|');tsub[k]=tsub[k]===+n?null:+n;renderTempoSub();return}
   if(e.target.closest('#t-subgo'))doSub(tsub.out,tsub.in);
   if(e.target.closest('#t-subclr')){tsub.out=null;tsub.in=null;renderTempoSub()}});
  $('#t-period').onclick=e=>{const b=e.target.closest('[data-p]');if(b)setPeriod(b.dataset.p)};
- const setTo=s=>{if(s==null||s>g.periodLength){toast(`Tempo inválido. Usa minutos:segundos até ${fmtClock(g.periodLength)}.`,'warn');return}t.remaining=s;if(t.running)t.startedAt=Date.now();save();updateTempoLive();toast('Relógio: '+fmtClock(s))};
+ const setTo=s=>{if(s==null||s>G().periodLength){toast(`Tempo inválido. Usa minutos:segundos até ${fmtClock(G().periodLength)}.`,'warn');return}T().remaining=s;if(T().running)T().startedAt=Date.now();save();updateTempoLive();toast('Relógio: '+fmtClock(s))};
  $('#t-set').onclick=()=>{const m=$('#t-manual').value.trim();setTo(m?parseClock(m):(+$('#t-min').value)*60+(+$('#t-sec').value));$('#t-manual').value=''};
  $('#t-manual').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#t-set').click()}});
  $('#t-players').addEventListener('click',e=>{const b=e.target.closest('[data-move]');if(b)moveIn(+b.dataset.move)});
  $('#t-players').addEventListener('change',e=>{const i=e.target.closest('[data-tname]');if(!i)return;player(+i.dataset.tname).name=i.value.trim();save()});
- $('#t-log').addEventListener('change',e=>{const el=e.target.closest('[data-ev]');if(!el)return;const ev=g.timer.events.find(x=>x.id===el.dataset.ev);if(!ev)return;
-  if(el.dataset.f==='period')ev.period=el.value;else{const s=parseClock(el.value);if(s==null||s>g.periodLength){toast('Relógio inválido (mm:ss).','warn');el.value=fmtClock(ev.clock);return}ev.clock=s}
+ $('#t-log').addEventListener('change',e=>{const el=e.target.closest('[data-ev]');if(!el)return;const ev=G().timer.events.find(x=>x.id===el.dataset.ev);if(!ev)return;
+  if(el.dataset.f==='period')ev.period=el.value;else{const s=parseClock(el.value);if(s==null||s>G().periodLength){toast('Relógio inválido (mm:ss).','warn');el.value=fmtClock(ev.clock);return}ev.clock=s}
   save();renderTempoPlayers();renderTempoLog()});
- $('#t-log').addEventListener('click',async e=>{const b=e.target.closest('[data-delev]');if(!b)return;if(!await confirmBox('Apagar movimento','Apagar este movimento? Os turnos do jogador são recalculados.','Apagar'))return;g.timer.events=g.timer.events.filter(x=>x.id!==b.dataset.delev);save();renderTempoPlayers();renderTempoLog()});
+ $('#t-log').addEventListener('click',async e=>{const b=e.target.closest('[data-delev]');if(!b)return;if(!await confirmBox('Apagar movimento','Apagar este movimento? Os turnos do jogador são recalculados.','Apagar'))return;G().timer.events=G().timer.events.filter(x=>x.id!==b.dataset.delev);save();renderTempoPlayers();renderTempoLog()});
  
- $('#t-delall').onclick=async()=>{if(!g.timer.events.length){toast('Não há movimentos para apagar.');return}if(!await confirmBox('Apagar movimentos',`Apagar os <b>${g.timer.events.length}</b> movimentos de entrada e saída?`,'Apagar todos'))return;g.timer.events=[];save();renderTempoPlayers();renderTempoLog()};
+ $('#t-delall').onclick=async()=>{if(!G().timer.events.length){toast('Não há movimentos para apagar.');return}if(!await confirmBox('Apagar movimentos',`Apagar os <b>${G().timer.events.length}</b> movimentos de entrada e saída?`,'Apagar todos'))return;G().timer.events=[];save();renderTempoPlayers();renderTempoLog()};
  renderTempoSub();renderTempoPlayers();renderTempoLog();updateTempoLive();
 }
-function addMove(n,type){const g=G();g.timer.seq=(g.timer.seq||0)+1;g.timer.events.push({id:uid(),n,type,period:g.period,clock:Math.round(clockNow()),seq:g.timer.seq,ts:Date.now()})}
+/* seq = ordem do registo. Calculado a partir dos movimentos que já existem (incluindo os que chegaram de
+   outros dispositivos), para dois dispositivos nunca darem o mesmo número a movimentos diferentes. */
+function addMove(n,type){const g=G(),ev=g.timer.events;const seq=Math.max(g.timer.seq||0,...ev.map(e=>e.seq||0))+1;g.timer.seq=seq;ev.push({id:uid(),n,type,period:g.period,clock:Math.round(clockNow()),seq,ts:Date.now()})}
 function afterMove(){save();renderTempoPlayers();renderTempoLog();renderTempoSub()}
 async function moveIn(n){
  const g=G(),s=computeShifts(),pool=Object.keys(s).map(Number).filter(k=>s[k].on),me=s[n];
@@ -82,7 +85,7 @@ function doSub(out,inn){
 }
 function renderTempoSub(){
  const box=$('#t-sub');if(!box)return;
- const g=G(),s=computeShifts(),pool=g.roster.filter(p=>s[p.n].on),bench=g.roster.filter(p=>!s[p.n].on&&(p.n<=13||p.name));
+ const g=G(),s=computeShifts(),pool=g.roster.filter(p=>s[p.n].on),bench=activeRoster(g).filter(p=>!s[p.n].on);
  if(tsub.out!=null&&!s[tsub.out].on)tsub.out=null;if(tsub.in!=null&&s[tsub.in].on)tsub.in=null;
  const chip=(k,p)=>`<button type="button" class="chip sub-chip ${k} ${tsub[k]===p.n?'on':''}" data-sub="${k}|${p.n}"><span class="capnum ${p.gr?'gk':''}">${p.n}</span>${esc(p.name||(p.gr?'GR':'Jogador '+p.n))}</button>`;
  box.innerHTML=`<div class="rec-head"><h2 class="sub">Substituição</h2><span class="muted small">Toca em quem sai e em quem entra, depois confirma.</span></div>
@@ -94,7 +97,7 @@ function renderTempoSub(){
 }
 function renderTempoPlayers(){
  const g=G(),s=computeShifts(),full=Object.values(s).filter(x=>x.on).length>=maxPool();
- $('#t-players').innerHTML=g.roster.map(p=>{const x=s[p.n];return `<tr class="${x.on?'inpool':''}" data-row="${p.n}"><td><span class="capnum ${p.gr?'gk':''}">${p.n}</span></td>
+ $('#t-players').innerHTML=activeRoster(g).map(p=>{const x=s[p.n];return `<tr class="${x.on?'inpool':''}" data-row="${p.n}"><td><span class="capnum ${p.gr?'gk':''}">${p.n}</span></td>
   <td class="l"><input class="inp-sm t-name" data-tname="${p.n}" value="${esc(p.name)}" placeholder="${p.gr?'Guarda-redes':'Nome'}" aria-label="Nome do jogador ${p.n}"></td>
   <td><span class="state">${x.on?'Na água':'Banco'}</span></td>
   <td><button type="button" class="btn btn-sm ${x.on?'btn-danger':full?'btn-primary':'btn-green'}" data-move="${p.n}" style="min-width:112px">${x.on?'SAIR':full?'⇄ SUBSTITUIR':'ENTRAR'}</button></td>
@@ -115,12 +118,12 @@ let lastPoolSig='';
 function updateTempoLive(){
  const g=G(),t=g.timer,c=$('#t-clock');if(!c)return;
  const now=clockNow(),s=computeShifts(),on=Object.values(s).filter(x=>x.on).length;
- c.textContent=fmtClock(now);c.classList.toggle('running',t.running);
- const pb=$('#t-play');if(pb)pb.innerHTML=t.running?icon('pause')+'Pausa':icon('play')+'Iniciar';
+ c.textContent=fmtClock(now);c.classList.toggle('running',clockRunning());
+ const pb=$('#t-play');if(pb)pb.innerHTML=clockRunning()?icon('pause')+'Pausa':icon('play')+'Iniciar';
  const i=PERIODS.indexOf(g.period),nx=$('#t-next');
  if(nx){nx.hidden=!(now<=0&&i<PERIODS.length-1);nx.innerHTML=`Começar o ${PERIODS[i+1]||''} período`}
  const note=$('#t-note');
- if(note){note.textContent=now<=0?(i<PERIODS.length-1?`Fim do ${g.period} período.`:'Fim do jogo.'):(!t.running&&on?'Relógio parado: o tempo dos jogadores não está a contar.':'');note.hidden=!note.textContent}
+ if(note){note.textContent=now<=0?(i<PERIODS.length-1?`Fim do ${g.period} período.`:'Fim do jogo.'):(!clockRunning()&&on?'Relógio parado: o tempo dos jogadores não está a contar.':'');note.hidden=!note.textContent}
  const el=$('#t-on');if(el){el.textContent=on;el.classList.toggle('full',on>=maxPool())}
  const sig=Object.keys(s).filter(k=>s[k].on).join(',')+'|'+(on>=maxPool());
  if(sig!==lastPoolSig&&$('#t-players tr[data-row]')){lastPoolSig=sig;renderTempoPlayers();renderTempoSub();return}
