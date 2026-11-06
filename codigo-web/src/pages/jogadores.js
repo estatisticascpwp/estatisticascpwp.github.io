@@ -19,8 +19,8 @@ function renderJogadores(){
  <section class="panel">
   <div class="view-head"><div><h1 class="title">Jogadores</h1><p>O plantel do SCP para este jogo. É o mesmo usado na Estatística Individual, Tempo de Jogo e Exclusões: altera aqui ou lá, fica igual em todo o lado.</p></div>
    <div class="btn-row"><button type="button" class="btn btn-ghost" id="jg-copy">${icon('roster')}Copiar de outro jogo</button></div></div>
-  <div class="table-wrap"><table class="roster-tbl"><thead><tr><th>Nº</th><th class="l">Nome</th><th>GR</th><th class="l">Posição</th><th class="l">Mão</th><th>Remates</th><th>Golos</th><th>Tempo</th><th>Ficha</th></tr></thead><tbody id="jg-roster"></tbody></table></div>
-  <p class="count">Os guarda-redes usam touca vermelha (nº 1 e 13 por defeito). Os nº 14 e 15 aparecem nos outros programas só depois de terem nome.</p>
+  <div class="table-wrap"><table class="roster-tbl"><thead><tr><th>Nº</th><th class="l">Nome</th><th>GR</th><th class="l">Posição</th><th class="l">Mão</th><th>Remates</th><th>Golos</th><th>Assist.</th><th>Tempo</th><th>Ficha</th></tr></thead><tbody id="jg-roster"></tbody></table></div>
+  <p class="count">Escalão <b>${esc(g.escalao)}</b>: ${rosterSize(g)} jogadores. Os guarda-redes usam touca vermelha (nº 1 e 13 por defeito). Cada escalão tem o seu plantel: um jogo novo começa com o plantel do último jogo do mesmo escalão.</p>
  </section>
  <section class="panel" id="jg-ficha"></section>`;
  renderRosterRows();renderFicha();
@@ -35,27 +35,27 @@ function renderJogadores(){
   if(f){jog.sel=+f.dataset.ficha;renderFicha();$('#jg-ficha').scrollIntoView({behavior:'smooth'})}});
  
  
- $('#jg-copy').onclick=async()=>{const others=Object.values(DB.games).filter(x=>x.id!==g.id&&x.roster.some(p=>p.name));
+ $('#jg-copy').onclick=async()=>{const others=Object.values(DB.games).filter(x=>x.id!==g.id&&x.roster.some(p=>p.name)).sort((a,b)=>(a.escalao===g.escalao?0:1)-(b.escalao===g.escalao?0:1));
   if(!others.length){toast('Não há outros jogos com plantel preenchido.','warn');return}
-  const id=await modal({title:'Copiar plantel',body:`<p>Escolhe o jogo de onde copiar nomes, GR, posição e mão. Os registos deste jogo não mudam.</p><select id="m-game" class="inp">${others.sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(x=>`<option value="${x.id}">${esc(fmtDate(x.date))} · vs ${esc(x.opponent)}</option>`).join('')}</select>`,
+  const id=await modal({title:'Copiar plantel',body:`<p>Escolhe o jogo de onde copiar nomes, GR, posição e mão. Os registos deste jogo não mudam.</p><select id="m-game" class="inp">${others.sort((a,b)=>(a.escalao===g.escalao?0:1)-(b.escalao===g.escalao?0:1)||String(b.date).localeCompare(String(a.date))).map(x=>`<option value="${x.id}">${esc(x.escalao)} · ${esc(fmtDate(x.date))} · vs ${esc(x.opponent)}</option>`).join('')}</select>`,
    actions:[{label:'Cancelar',cls:'btn-ghost',value:null},{label:'Copiar plantel',cls:'btn-primary',get:r=>r.querySelector('#m-game').value}]});
   if(!id)return;g.roster=DB.games[id].roster.map(p=>({...p}));save();renderJogadores();toast('Plantel copiado')};
 }
 function renderRosterRows(){
  const g=G(),s=computeShifts();
- $('#jg-roster').innerHTML=g.roster.map(p=>{const l=playerLine(g,p.n);return `<tr><td><span class="capnum ${p.gr?'gk':''}">${p.n}</span></td>
+ $('#jg-roster').innerHTML=activeRoster(g).map(p=>{const l=playerLine(g,p.n);return `<tr><td><span class="capnum ${p.gr?'gk':''}">${p.n}</span></td>
   <td class="l"><input class="inp-sm" data-rn="${p.n}" value="${esc(p.name)}" placeholder="Nome" aria-label="Nome do jogador ${p.n}"></td>
   <td><button type="button" class="gk-t ${p.gr?'on':''}" data-rgk="${p.n}" title="Guarda-redes">GR</button></td>
   <td class="l"><select class="inp-sm" data-rp="${p.n}" aria-label="Posição do jogador ${p.n}"><option value="">—</option>${POSITIONS.map(x=>`<option ${p.pos===x?'selected':''}>${x}</option>`).join('')}</select></td>
   <td class="l"><select class="inp-sm" data-rh="${p.n}" aria-label="Mão do jogador ${p.n}">${HANDS.map(x=>`<option value="${x}" ${p.hand===x?'selected':''}>${x||'—'}</option>`).join('')}</select></td>
-  <td>${p.gr?'—':l.shots}</td><td>${p.gr?'—':l.goals}</td><td>${s[p.n].total?fmtClock(s[p.n].total):'—'}</td>
+  <td>${p.gr?'—':l.shots}</td><td>${p.gr?'—':l.goals}</td><td>${p.gr?'—':l.ast}</td><td>${s[p.n].total?fmtClock(s[p.n].total):'—'}</td>
   <td><button type="button" class="btn btn-sm ${jog.sel===p.n?'btn-green':'btn-outline'}" data-ficha="${p.n}">Ver</button></td></tr>`}).join('');
 }
 function renderFicha(){
  const g=G(),box=$('#jg-ficha');
  if(jog.sel==null){const best=g.roster.filter(p=>!p.gr).map(p=>({p,l:playerLine(g,p.n)})).sort((a,b)=>b.l.goals-a.l.goals||b.l.shots-a.l.shots)[0];jog.sel=best?best.p.n:1}
  const p=player(jog.sel),l=playerLine(g,p.n),sh=computeShifts()[p.n],ex=exOf('scp',p.n);
- const games=Object.values(DB.games).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+ const games=Object.values(DB.games).filter(x=>x.escalao===g.escalao).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
  const hist=games.map(x=>{const n=findInGame(x,p);if(n==null)return null;const hl=playerLine(x,n);const sx=(()=>{const keep=DB.currentId;DB.currentId=x.id;const r=computeShifts()[n];DB.currentId=keep;return r})();const e=(x.excl.scp||{})[n]||{ex:0};return {x,n,hl,t:sx?sx.total:0,ex:e.ex}}).filter(h=>h&&(h.hl.F.length||h.hl.K.length||h.t));
  const tot=hist.reduce((a,h)=>{['shots','goals','ast','excW','excL','sv','gs'].forEach(k=>a[k]+=h.hl[k]);a.t+=h.t;a.ex+=h.ex;return a},{shots:0,goals:0,ast:0,excW:0,excL:0,sv:0,gs:0,t:0,ex:0});
  const acts=[...groupBy(l.F,'action')].map(([k,rs])=>({label:k,v:rs.length,bad:['Defesa','Bloco','Fora','EXC sofrida','Perda Bola','Passe Falhado','Falta Atacante'].includes(k)})).sort((a,b)=>b.v-a.v);
@@ -78,7 +78,7 @@ function renderFicha(){
    <div><div class="pitch-card"><div class="pc-h"><b>Destino dos remates</b></div>${goalMarkup('jgoal')}</div>
     <h3 class="mini" style="margin-top:14px">Ações registadas</h3>${barsHTML(acts)}</div>
   </div>`}
-  <h3 class="mini" style="margin-top:20px">Histórico em todos os jogos guardados</h3>
+  <h3 class="mini" style="margin-top:20px">Histórico nos jogos de ${esc(g.escalao)}</h3>
   <div class="table-wrap"><table><thead><tr><th class="l">Data</th><th class="l">Adversário</th><th>Nº</th>${p.gr?'<th>Defesas</th><th>Golos sofridos</th><th>% defesas</th>':'<th>Remates</th><th>Golos</th><th>Eficácia</th><th>Assist.</th><th>EXC ganhas</th><th>EXC sofridas</th>'}<th>Tempo</th></tr></thead><tbody>
   ${hist.length?hist.map(h=>`<tr ${h.x.id===g.id?'style="background:#eaf5ef"':''}><td class="l">${esc(fmtDate(h.x.date))}</td><td class="l">${esc(h.x.opponent)}${h.x.demo?' <span class="cur-pill" style="background:var(--warnbg);color:var(--warn)">exemplo</span>':''}</td><td>${h.n}</td>${p.gr?`<td>${h.hl.sv}</td><td>${h.hl.gs}</td><td>${fmtPct(h.hl.sv,h.hl.gkOn)}</td>`:`<td>${h.hl.shots}</td><td><b>${h.hl.goals}</b></td><td>${fmtPct(h.hl.goals,h.hl.shots)}</td><td>${h.hl.ast}</td><td>${h.hl.excW}</td><td>${h.hl.excL}</td>`}<td>${h.t?fmtClock(h.t):'—'}</td></tr>`).join('')
    +(hist.length>1?`<tr style="background:#eef3f1;font-weight:800"><td class="l" colspan="3">Total (${hist.length} jogos)</td>${p.gr?`<td>${tot.sv}</td><td>${tot.gs}</td><td>${fmtPct(tot.sv,tot.sv+tot.gs)}</td>`:`<td>${tot.shots}</td><td>${tot.goals}</td><td>${fmtPct(tot.goals,tot.shots)}</td><td>${tot.ast}</td><td>${tot.excW}</td><td>${tot.excL}</td>`}<td>${fmtClock(tot.t)}</td></tr>`:'')

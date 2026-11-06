@@ -425,3 +425,11 @@ html.standalone body{overscroll-behavior-y:none}
 @media (max-width:560px){.tb-toolbar{gap:8px}.tb-tool,.tb-add{padding:5px 8px;font-size:12.5px}.tb-svg{max-height:none;max-width:100%}}
 .tb-mobilehint{display:none;margin:0}
 @media (max-width:700px){.tb-mobilehint{display:block}}
+
+/* ---------- escalões, assistências, sincronização ---------- */
+.sb-esc{display:block;font:600 11px/1.2 var(--f-body,inherit);letter-spacing:.6px;opacity:.8;margin-top:2px}
+.chip small{font-weight:600;opacity:.65;margin-left:3px}
+#h-escf{gap:6px}#h-escf .chip{min-height:34px;padding:5px 10px;font-size:13px}
+.ast-matrix td,.ast-matrix th{min-width:38px;text-align:center}
+.ast-matrix td.l{min-width:150px;text-align:left}
+.hdr-cloud.warn .dot{animation:none}

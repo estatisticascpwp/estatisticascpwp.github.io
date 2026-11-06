@@ -33,6 +33,7 @@ const ICONS={
  save:'<path d="M5 3h11l3 3v15H5zM8 3v5h7M8 21v-7h8v7"/>',
  reset:'<path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v5h5"/>',
  board:'<rect x="3" y="4" width="18" height="14" rx="1.5"/><path d="M12 4v14M8 21h8"/><circle cx="7.5" cy="9" r="1.3"/><path d="M15 13.5l2.5-2.5M15 11h2.5v2.5"/>',
+ assist:'<circle cx="5" cy="17" r="2.5"/><circle cx="19" cy="7" r="2.5"/><path d="M7.2 15.6C10 12 13 9.6 16.6 8.2"/><path d="M13.6 7.4l3 .8-.8 3"/>',
  plus:'<path d="M12 5v14M5 12h14"/>',
  play:'<path d="M7 4l13 8-13 8z"/>',
  pause:'<path d="M8 4v16M16 4v16"/>',
@@ -51,12 +52,26 @@ const icon=(n,cls='')=>`<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" s
 const DEFAULT_SETTINGS={teamName:'Sporting CP',periodLength:480,maxInPool:7,assistRequired:true,autoAttack:true,resetClockOnPeriod:true};
 const S=()=>(typeof DB!=='undefined'&&DB.settings)||DEFAULT_SETTINGS;
 const POSITIONS=['Guarda-redes','Pivot','Defesa-pivot','Ponta','Lateral','Central','Universal'];
-function defaultRoster(){return Array.from({length:15},(_,i)=>({n:i+1,name:'',gr:i===0||i===12,pos:i===0||i===12?'Guarda-redes':'',hand:''}))}
-function defaultOpp(){return Array.from({length:13},(_,i)=>({n:i+1,name:''}))}
+/* Escalões: cada um tem o seu plantel. Seniores com 14 jogadores, sub20 e abaixo com 15. */
+const ESCALOES=[{id:'Seniores A',size:14},{id:'Seniores B',size:14},{id:'Sub20',size:15},{id:'Sub18',size:15},{id:'Sub16',size:15},{id:'Sub14',size:15}];
+const ESC_IDS=ESCALOES.map(e=>e.id);
+const MAX_ROSTER=15;
+const rosterSize=g=>(ESCALOES.find(e=>e.id===(g&&g.escalao))||ESCALOES[0]).size;
+/** jogadores do escalão do jogo (mais algum número acima do limite que já tenha nome, para não esconder dados antigos) */
+const activeRoster=g=>g.roster.filter(p=>p.n<=rosterSize(g)||p.name);
+const activeOpp=g=>g.oppRoster.filter(p=>p.n<=rosterSize(g)||p.name);
+function defaultRoster(){return Array.from({length:MAX_ROSTER},(_,i)=>({n:i+1,name:'',gr:i===0||i===12,pos:i===0||i===12?'Guarda-redes':'',hand:''}))}
+function defaultOpp(){return Array.from({length:MAX_ROSTER},(_,i)=>({n:i+1,name:''}))}
+/** jogo mais recente de um escalão com plantel preenchido (para começar o próximo jogo com os mesmos jogadores) */
+function lastRosterGame(esc,exceptId){
+ return Object.values(DB.games).filter(x=>x.id!==exceptId&&!x.demo&&(x.escalao||'Seniores A')===esc&&x.roster.some(p=>p.name))
+  .sort((a,b)=>String(b.date).localeCompare(String(a.date))||(b.created||0)-(a.created||0))[0]||null;
+}
 function newGame(base,opts={}){
  const L=S().periodLength||480;
  return {
   id:uid(), scpName:S().teamName||'Sporting CP', opponent:'Adversário', date:todayISO(), competition:'', venue:'',
+  escalao:ESC_IDS.includes(opts.escalao)?opts.escalao:'Seniores A',
   period:'1º', periodLength:L,
   roster: base&&opts.keepRoster? base.roster.map(p=>({...p})) : defaultRoster(),
   oppRoster: defaultOpp(),
@@ -70,8 +85,9 @@ function newGame(base,opts={}){
 function normalizeGame(g){
  const b=newGame();
  for(const k of Object.keys(b)) if(g[k]===undefined||g[k]===null) g[k]=b[k];
- const r=defaultRoster(); (Array.isArray(g.roster)?g.roster:[]).forEach(p=>{if(p&&p.n>=1&&p.n<=15)r[p.n-1]={...r[p.n-1],...p}}); g.roster=r;
- const o=defaultOpp(); (Array.isArray(g.oppRoster)?g.oppRoster:[]).forEach(p=>{if(p&&p.n>=1&&p.n<=13)o[p.n-1]={...o[p.n-1],...p}}); g.oppRoster=o;
+ const r=defaultRoster(); (Array.isArray(g.roster)?g.roster:[]).forEach(p=>{if(p&&p.n>=1&&p.n<=MAX_ROSTER)r[p.n-1]={...r[p.n-1],...p}}); g.roster=r;
+ const o=defaultOpp(); (Array.isArray(g.oppRoster)?g.oppRoster:[]).forEach(p=>{if(p&&p.n>=1&&p.n<=MAX_ROSTER)o[p.n-1]={...o[p.n-1],...p}}); g.oppRoster=o;
+ if(!ESC_IDS.includes(g.escalao))g.escalao='Seniores A';
  g.timer={...b.timer,...g.timer}; if(!Array.isArray(g.timer.events))g.timer.events=[];
  g.excl=g.excl||{}; g.excl.scp=g.excl.scp||{}; g.excl.opp=g.excl.opp||{};
  if(!Array.isArray(g.sprints)||g.sprints.length!==4) g.sprints=b.sprints;
@@ -104,7 +120,7 @@ function save(silent){
 const player=n=>G().roster.find(p=>p.n===+n);
 const pname=n=>{const p=player(n);return p&&p.name?p.name:'Jogador '+n};
 const plabel=n=>n?`${n} · ${pname(n)}`:'—';
-const namedRoster=()=>G().roster.filter(p=>p.n<=13||p.name);
+const namedRoster=()=>activeRoster(G());
 
 /* ---------- Modal e avisos (sem alert/confirm do browser) ---------- */
 function modal({title,body,actions,onOpen}){
@@ -168,6 +184,7 @@ const VIEWS=[
  {id:'inicio',file:'index.html',label:'Início',icon:'home',render:()=>renderHome()},
  {id:'individual',file:'estatistica_individual.html',label:'Individual',icon:'player',render:()=>renderIndividual()},
  {id:'remates',file:'remates.html',label:'Remates',icon:'target',render:()=>renderRemates()},
+ {id:'assistencias',file:'assistencias.html',label:'Assistências',icon:'assist',render:()=>renderAssistencias()},
  {id:'jogadores',file:'jogadores.html',label:'Jogadores',icon:'roster',render:()=>renderJogadores()},
  {id:'guardaredes',file:'guarda_redes.html',label:'Guarda-Redes',icon:'goal',render:()=>renderGuardaRedes()},
  {id:'coletiva',file:'estatistica_coletiva.html',label:'Coletiva',icon:'team',render:()=>renderColetiva()},
@@ -201,35 +218,61 @@ function renderHeader(){
 function updateHeader(){
  const g=G(); if(!g||!$('#hdr-game'))return;
  const sc=scoreOf(g);
- $('#hdr-game').innerHTML=`<b>SCP ${sc.scp} – ${sc.opp} ${esc(g.opponent||'Adversário')}</b><span class="hg-sub">${esc(fmtDate(g.date))}${g.competition?' · '+esc(g.competition):''}</span>`;
+ $('#hdr-game').innerHTML=`<b>SCP ${sc.scp} – ${sc.opp} ${esc(g.opponent||'Adversário')}</b><span class="hg-sub">${esc(fmtDate(g.date))} · ${esc(g.escalao)}${g.competition?' · '+esc(g.competition):''}</span>`;
  $$('#hdr-period button').forEach(b=>b.classList.toggle('on',b.dataset.p===g.period));
  $('#demo-banner').hidden=!g.demo;
  if(typeof updateCloudUI==='function')updateCloudUI();
 }
 async function setPeriod(p){
  const g=G(); if(g.period===p)return;
+ const t=g.timer,left=clockNow(),inProgress=(t.running&&left>0)||(left>0&&left<g.periodLength);
+ if(inProgress&&!await confirmBox(`Mudar para o ${p} período?`,`O ${g.period} período ainda está a decorrer (relógio em <b>${fmtClock(left)}</b>${t.running&&left>0?', a correr':''}). Se mudares, o relógio pára e é reposto a ${fmtClock(g.periodLength)} no ${p} período.`,'Mudar de período',false))return;
  const later=g.timer.events.filter(e=>PERIODS.indexOf(e.period)>PERIODS.indexOf(p));
  if(later.length){
   const last=PERIODS[Math.max(...later.map(e=>PERIODS.indexOf(e.period)))];
   if(!await confirmBox('Voltar a um período anterior?',`Já há ${later.length} entrada(s)/saída(s) registadas até ao <b>${last} período</b>. Se voltares ao ${p} período e registares mais movimentos, os tempos de jogo ficam errados.<br><br>Para experimentar a app, cria antes um jogo novo em Início.`,'Mudar mesmo assim'))return;
  }
  g.period=p;
- if(S().resetClockOnPeriod){g.timer.running=false;g.timer.remaining=g.periodLength}
- save(); rerender(); toast(p+' período ativo'+(S().resetClockOnPeriod?' · relógio reposto a '+fmtClock(g.periodLength):''));
+ // relógio a 0:00 no período novo faria contar um período inteiro a mais: repor sempre nesse caso
+ const reset=S().resetClockOnPeriod||clockNow()<=0;
+ if(reset){g.timer.running=false;g.timer.remaining=g.periodLength}
+ save(); rerender(); toast(p+' período ativo'+(reset?' · relógio reposto a '+fmtClock(g.periodLength):''));
+}
+/* Resultado: os golos podem ser registados em vários programas (Individual, Guarda-Redes, Exclusões, Coletiva).
+   Para não contar o mesmo golo duas vezes, cada fonte é contada à parte e fica a maior:
+   SCP — por jogador, o maior entre os golos da Estatística Individual e os da tabela de Exclusões;
+   Adversário — o maior entre os golos sofridos (GR), os golos do adversário nas Exclusões e os da Coletiva. */
+const COL_ATT=['scp','plus','caSCP'],COL_DEF=['other','minus','caOther'];
+function scpGoalsByPlayer(g){
+ const m={},ind={};(g.individual||[]).forEach(r=>{if(r.mode==='field'&&r.action==='Golo'&&r.player)ind[r.player]=(ind[r.player]||0)+1});
+ const ex=(g.excl||{}).scp||{};
+ new Set([...Object.keys(ind),...Object.keys(ex)]).forEach(n=>{const v=Math.max(ind[n]||0,(ex[n]||{}).goals||0);if(v)m[n]=v});
+ return {total:m,ind};
 }
 function scoreOf(g){
- const sum=t=>Object.values(g.excl[t]||{}).reduce((a,x)=>a+(x.goals||0),0);
- return {scp:sum('scp'),opp:sum('opp')};
+ const col=g.collective||[],colG=tabs=>col.filter(r=>r.outcome==='GOLO'&&tabs.includes(r.table)).length;
+ const scpP=Object.values(scpGoalsByPlayer(g).total).reduce((a,b)=>a+b,0);
+ const oppEx=Object.values(((g.excl||{}).opp)||{}).reduce((a,x)=>a+(x.goals||0),0);
+ const oppGk=(g.individual||[]).filter(r=>r.mode==='gk'&&r.action==='Golo Sofrido').length;
+ return {scp:Math.max(scpP,colG(COL_ATT)),opp:Math.max(oppEx,oppGk,colG(COL_DEF))};
 }
 
 /* ---------- Gestão de jogos (partilhado) ---------- */
 async function newGameFlow(){
- const g=G();
- const keep=await modal({title:'Novo jogo',body:`<p>Cria um jogo vazio. O jogo atual fica guardado em "Jogos guardados".</p><label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="m-keep" ${g.demo?'':'checked'}> Manter o plantel do SCP (nomes e GR)</label>`,
-  actions:[{label:'Cancelar',cls:'btn-ghost',value:null},{label:'Criar jogo',cls:'btn-primary',get:r=>r.querySelector('#m-keep').checked}]});
- if(keep===null)return;
- const n=newGame(g,{keepRoster:keep}); DB.games[n.id]=n; DB.currentId=n.id; save(); resetLocalState();
- goTo('inicio'); toast('Novo jogo criado'); setTimeout(()=>$('#h-opp')&&$('#h-opp').focus(),50);
+ const g=G(),def=g&&!g.demo?g.escalao:(DB.settings.lastEscalao||'Seniores A');
+ const srcTxt=e=>{const src=lastRosterGame(e);const sz=(ESCALOES.find(x=>x.id===e)||ESCALOES[0]).size;
+  return src?`Usar o plantel de ${esc(e)} do último jogo (${esc(fmtDate(src.date))} vs ${esc(src.opponent)})`:`Ainda não há plantel de ${esc(e)}: começa com ${sz} jogadores sem nome`};
+ const res=await modal({title:'Novo jogo',body:`<p>Cria um jogo vazio. O jogo atual fica guardado em "Jogos guardados".</p>
+  <div class="field" style="margin-top:10px"><label for="m-esc">Escalão</label><select id="m-esc">${ESCALOES.map(e=>`<option value="${e.id}" ${e.id===def?'selected':''}>${e.id} · ${e.size} jogadores</option>`).join('')}</select></div>
+  <div class="field" style="margin-top:10px"><label for="m-opp">Adversário</label><input id="m-opp" placeholder="Ex.: SL Benfica"></div>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="m-keep" checked> <span id="m-keep-txt">${srcTxt(def)}</span></label>`,
+  onOpen:r=>{const s=r.querySelector('#m-esc'),t=r.querySelector('#m-keep-txt'),k=r.querySelector('#m-keep');const upd=()=>{t.innerHTML=srcTxt(s.value);const has=!!lastRosterGame(s.value);k.disabled=!has;k.checked=has};s.onchange=upd;upd()},
+  actions:[{label:'Cancelar',cls:'btn-ghost',value:null},{label:'Criar jogo',cls:'btn-primary',get:r=>({esc:r.querySelector('#m-esc').value,opp:r.querySelector('#m-opp').value.trim(),keep:r.querySelector('#m-keep').checked})}]});
+ if(!res)return;
+ const src=res.keep?lastRosterGame(res.esc):null;
+ const n=newGame(src,{keepRoster:!!src,escalao:res.esc}); if(res.opp)n.opponent=res.opp;
+ DB.games[n.id]=n; DB.currentId=n.id; DB.settings.lastEscalao=res.esc; save(); resetLocalState();
+ goTo('inicio'); toast(`Novo jogo criado · ${res.esc}`); if(!res.opp)setTimeout(()=>$('#h-opp')&&$('#h-opp').focus(),50);
 }
 function resetLocalState(){
  if(typeof ind!=='undefined')Object.assign(ind,{mode:'field',editing:null,period:null,player:null,action:null,sit:null,assist:null,f:null,g:null,showWarn:false,filters:{period:'',player:'',action:''}});
@@ -399,6 +442,8 @@ function bindCombo(root,opts){
 
 const maxPool=()=>S().maxInPool||7;
 function clockNow(){const t=G().timer;if(!t.running)return t.remaining;return Math.max(0,t.remaining-(Date.now()-t.startedAt)/1000)}
+/** relógio realmente a contar (a correr e acima de 0:00) */
+const clockRunning=()=>G().timer.running&&clockNow()>0;
 function absTime(period,clock){const L=G().periodLength;return Math.max(0,PERIODS.indexOf(period))*L+(L-clock)}
 function nowAbs(){return absTime(G().period,clockNow())}
 /* Quem está na água: decidido pela ORDEM em que os movimentos foram registados (seq),
@@ -465,11 +510,34 @@ const distBand=r=>{if(r.fy==null)return null;const m=r.fy*12.5;const b=DIST_BAND
 const heatCell=(v,max,color)=>v?`<span class="heat" style="background:${color.replace('A',(0.12+0.6*v/Math.max(1,max)).toFixed(2))}">${v}</span>`:'<span class="muted">·</span>';
 const fmtPct=(a,b)=>b?pct(a,b)+'%':'—';
 
+/* ---------- assistências (Golo e EXC ganha com "quem assistiu") ----------
+   Vários jogos: o jogador é reconhecido pelo nome (ou pelo número, se não tiver nome). */
+const astNum=a=>typeof a==='number'?a:(/^\d+$/.test(String(a??''))?+a:null);
+function assistStats(games,{period=''}={}){
+ const many=games.length>1,P=new Map(),pairs=new Map(),bySit=new Map(),byPer=new Map(PERIODS.map(p=>[p,{goals:0,ast:0,exc:0}]));
+ let goals=0,assisted=0,solo=0,unknown=0,excW=0,excA=0;
+ const keyOf=(g,n)=>{const p=g.roster.find(x=>x.n===+n);return many&&p&&p.name?'n:'+norm(p.name):'#'+n};
+ const get=(g,n)=>{const k=keyOf(g,n);if(!P.has(k)){const p=g.roster.find(x=>x.n===+n);P.set(k,{key:k,n:+n,name:p&&p.name?p.name:'Jogador '+n,gr:!!(p&&p.gr),ag:0,ae:0,goals:0})}return P.get(k)};
+ games.forEach(g=>(g.individual||[]).forEach(r=>{
+  if(r.mode!=='field'||(period&&r.period!==period))return;
+  const isG=r.action==='Golo',isE=r.action==='EXC ganha';if(!isG&&!isE)return;
+  const a=astNum(r.assist),bp=byPer.get(r.period);
+  if(isG){
+   goals++;const sc=get(g,r.player);sc.goals++;if(bp)bp.goals++;
+   const sit=r.sit||'Sem situação';if(!bySit.has(sit))bySit.set(sit,{goals:0,ast:0});bySit.get(sit).goals++;
+   if(a){assisted++;const as=get(g,a);as.ag++;bySit.get(sit).ast++;if(bp)bp.ast++;
+    const pk=as.key+'>'+sc.key;if(!pairs.has(pk))pairs.set(pk,{from:as,to:sc,v:0});pairs.get(pk).v++}
+   else if(r.assist==='none')solo++;else unknown++;
+  }else{excW++;if(a){excA++;get(g,a).ae++;if(bp)bp.exc++}}
+ }));
+ return {players:[...P.values()],pairs:[...pairs.values()],goals,assisted,solo,unknown,excW,excA,bySit,byPer,many};
+}
+
 /* =========================================================
    PWA — instalação no ecrã principal, funcionamento offline e atualizações.
    Só ativa na versão em pasta alojada num endereço https (tem <link rel="manifest">).
    ========================================================= */
-const APP_VERSION='001218d85a';
+const APP_VERSION='b9e49b3935';
 const pwa={deferred:null,reg:null,waiting:false};
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
 const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
@@ -565,8 +633,11 @@ const CLOUD_CFG={
  }
 };
 const SYNC_KEY='scpStatPoloAquatico.sync.v1';
+/* Se a sincronização ficar presa (rede que parece ligada mas não chega à internet, como algumas redes de piscina),
+   ao fim deste tempo sem resposta do servidor é cancelada. Os registos ficam guardados no dispositivo. */
+const SYNC_TIMEOUT=(()=>{try{return +localStorage.getItem('scpStat.syncTimeoutMs')||25000}catch(e){return 25000}})();
 const CLOUD_DISMISS_KEY='scpStatPoloAquatico.cloudDismissed';
-const META_FIELDS=['scpName','opponent','date','competition','venue','period','periodLength','roster','oppRoster','timer','sprints','created','updated'];
+const META_FIELDS=['scpName','opponent','date','competition','venue','escalao','period','periodLength','roster','oppRoster','timer','sprints','created','updated'];
 
 /* ---------- funções puras (testadas fora do browser) ---------- */
 function stableStr(v){
@@ -639,7 +710,31 @@ function applyMeta(g,synced,data){
 
 /* ---------- estado e armazenamento da sincronização ---------- */
 const cloud={fb:null,auth:null,db:null,user:null,state:'off',error:'',ready:false,metaReady:false,
- unsubMeta:null,unsubRecs:null,unsubTact:null,tactReady:false,tactTimer:null,listenId:null,pushTimer:null,inflight:0,lastSync:0,authResolved:false,prompted:false};
+ unsubMeta:null,unsubRecs:null,unsubTact:null,tactReady:false,tactTimer:null,listenId:null,pushTimer:null,inflight:0,lastSync:0,authResolved:false,prompted:false,
+ gen:0,paused:false,busySince:0,lastProgress:0};
+const cloudBusy=()=>cloud.state==='connecting'||cloud.state==='syncing';
+/** resposta do servidor (não da cópia local): a sincronização está a avançar */
+function cloudProgress(snap){if(!snap||!snap.metadata||!snap.metadata.fromCache)cloud.lastProgress=Date.now()}
+/** envio acompanhado; se a sincronização for cancelada entretanto, a resposta tardia é ignorada */
+function cloudTrack(pr){
+ const gen=cloud.gen;cloud.inflight++;
+ pr.then(()=>{if(gen!==cloud.gen)return;cloud.inflight=Math.max(0,cloud.inflight-1);cloud.lastProgress=Date.now();markSynced()})
+  .catch(e=>{if(gen!==cloud.gen)return;cloud.inflight=Math.max(0,cloud.inflight-1);onCloudError(e)});
+}
+function cloudWatch(){
+ if(!cloudBusy()||cloud.paused)return;
+ const since=Math.max(cloud.busySince,cloud.lastProgress);
+ if(since&&Date.now()-since>SYNC_TIMEOUT)cloudCancel(true);
+}
+/** cancela a tentativa de sincronização: pára de escutar e de tentar enviar até o utilizador tentar outra vez */
+function cloudCancel(auto){
+ cloud.gen++;cloud.inflight=0;cloud.paused=true;
+ stopSync();
+ if(cloud.fb&&cloud.db&&cloud.fb.disableNetwork)cloud.fb.disableNetwork(cloud.db).catch(()=>{});
+ const secs=Math.round(SYNC_TIMEOUT/1000);
+ setCloudState('paused',auto?`A sincronização ficou ${secs} segundos sem resposta do servidor e foi cancelada. A rede pode estar ligada mas sem acesso à internet.`:'Sincronização cancelada.');
+ toast(auto?'Sincronização cancelada: sem resposta do servidor. Os registos ficam neste dispositivo.':'Sincronização cancelada. Os registos ficam neste dispositivo.','warn');
+}
 function syncState(){
  let s=null;try{s=JSON.parse(localStorage.getItem(SYNC_KEY)||'null')}catch(e){}
  if(!s||typeof s!=='object')s={};
@@ -652,7 +747,11 @@ const tsGt=(a,b)=>!b||a.s>b.s||(a.s===b.s&&a.n>b.n);
 const tsOf=u=>u&&typeof u.seconds==='number'?{s:u.seconds,n:u.nanoseconds||0}:null;
 
 /* ---------- estado visível ---------- */
-function setCloudState(st,err){cloud.state=st;if(err!==undefined)cloud.error=err;updateCloudUI()}
+function setCloudState(st,err){
+ const was=cloudBusy();cloud.state=st;if(err!==undefined)cloud.error=err;
+ if(cloudBusy()&&!was)cloud.busySince=Date.now();if(!cloudBusy())cloud.busySince=0;
+ updateCloudUI();
+}
 function cloudLabel(){
  switch(cloud.state){
   case 'login':return {t:'Ligar à equipa',c:'login'};
@@ -661,6 +760,7 @@ function cloudLabel(){
   case 'synced':return {t:'Sincronizado',c:'ok'};
   case 'offline':return {t:'Sem rede',c:'warn'};
   case 'error':return {t:'Erro na nuvem',c:'bad'};
+  case 'paused':return {t:'Sincronização parada',c:'warn'};
   default:return {t:'Só neste dispositivo',c:'off'};
  }
 }
@@ -681,11 +781,15 @@ function cloudCardHTML(){
   syncing:'A enviar e receber registos…',
   synced:`Ligado como ${esc(CLOUD_CFG.email)}. Última sincronização às ${when}.`,
   offline:'Sem ligação à internet. Os registos ficam guardados neste dispositivo e são enviados quando a rede voltar.',
-  error:esc(cloud.error||'Ocorreu um erro na sincronização.')
+  error:esc(cloud.error||'Ocorreu um erro na sincronização.'),
+  paused:esc(cloud.error||'Sincronização cancelada.')+' Os registos continuam guardados neste dispositivo e são enviados quando tentares outra vez.'
  }[cloud.state]||'';
- const btns=cloud.user
-  ?`<button type="button" class="btn btn-sm btn-outline" data-cloud="sync">Sincronizar agora</button><button type="button" class="btn btn-sm btn-ghost" data-cloud="logout">Desligar este dispositivo</button>`
-  :`<button type="button" class="btn btn-sm btn-primary" data-cloud="login">Ligar à base de dados</button>`;
+ const cancel=`<button type="button" class="btn btn-sm btn-danger" data-cloud="cancel">Cancelar sincronização</button>`;
+ const btns=cloud.state==='paused'
+  ?`<button type="button" class="btn btn-sm btn-primary" data-cloud="sync">Tentar outra vez</button>${cloud.user?`<button type="button" class="btn btn-sm btn-ghost" data-cloud="logout">Desligar este dispositivo</button>`:''}`
+  :cloud.user
+  ?`${cloudBusy()?cancel:`<button type="button" class="btn btn-sm btn-outline" data-cloud="sync">Sincronizar agora</button>`}<button type="button" class="btn btn-sm btn-ghost" data-cloud="logout">Desligar este dispositivo</button>`
+  :cloudBusy()?cancel:`<button type="button" class="btn btn-sm btn-primary" data-cloud="login">Ligar à base de dados</button>`;
  return `<div class="cloud-card"><span class="cloud-pill ${l.c}"><span class="dot"></span>${l.t}</span><p class="muted small" style="margin:8px 0 10px">${txt}${cloud.user?` · ${n} jogo(s) sincronizado(s) neste dispositivo.`:''}</p><div class="btn-row">${btns}</div>
   <p class="muted small" style="margin:10px 0 0">Os jogos de exemplo ficam só neste dispositivo. Apagar um jogo em Início apaga-o também para a equipa.</p></div>`;
 }
@@ -693,9 +797,10 @@ function cloudCardHTML(){
 /* ---------- arranque ---------- */
 async function initCloud(){
  document.addEventListener('click',e=>{const b=e.target.closest('[data-cloud]');if(!b)return;const a=b.dataset.cloud;
-  if(a==='login')cloudLogin();else if(a==='logout')cloudLogout();else if(a==='sync')cloudSyncNow()});
- const hb=$('#hdr-cloud');if(hb)hb.onclick=()=>{if(!cloud.user)cloudLogin();else cloudInfo()};
+  if(a==='login')cloudLogin();else if(a==='logout')cloudLogout();else if(a==='sync')cloudSyncNow();else if(a==='cancel')cloudCancel(false)});
+ const hb=$('#hdr-cloud');if(hb)hb.onclick=()=>{if(cloud.user||cloudBusy()||cloud.state==='paused')cloudInfo();else cloudLogin()};
  if(!cloudAvailable()){updateCloudUI();return}
+ setInterval(cloudWatch,2000);
  window.addEventListener('online',()=>{if(cloud.user)cloudSyncNow()});
  // ao mudar de página, enviar logo o que ficou à espera (a página seguinte também o faria)
  window.addEventListener('pagehide',()=>{if(cloud.user&&cloud.ready){clearTimeout(cloud.pushTimer);pushAll()}});
@@ -716,6 +821,7 @@ async function initCloud(){
  }
  cloud.fb.onAuthStateChanged(cloud.auth,user=>{
   cloud.authResolved=true;cloud.user=user||null;
+  if(cloud.paused){updateCloudUI();return}          // cancelada: só volta a tentar quando o utilizador pedir
   if(user){startSync()}
   else{stopSync();setCloudState('login');maybePromptLogin()}
  });
@@ -732,7 +838,8 @@ const AUTH_ERR={
  'auth/too-many-requests':'Demasiadas tentativas. Espera alguns minutos e tenta outra vez.',
  'auth/network-request-failed':'Sem ligação à internet. Tenta quando houver rede; a app continua a funcionar neste dispositivo.',
  'auth/unauthorized-domain':'Este endereço não está autorizado no Firebase (Authentication › Settings › Authorized domains).',
- 'auth/operation-not-allowed':'O início de sessão por email não está ativo no Firebase (Authentication › Sign-in method).'
+ 'auth/operation-not-allowed':'O início de sessão por email não está ativo no Firebase (Authentication › Sign-in method).',
+ 'app/timeout':'O servidor não respondeu em 20 segundos. A rede pode estar ligada mas sem acesso à internet. Tenta outra vez mais tarde; a app continua a funcionar neste dispositivo.'
 };
 async function cloudLogin(auto){
  if(!cloudAvailable()){modal({title:'Base de dados da equipa',body:cloudCardHTML(),actions:[{label:'Fechar',cls:'btn-primary',value:true}]});return}
@@ -750,8 +857,11 @@ async function cloudLogin(auto){
   if(pw==null){if(auto){try{localStorage.setItem(CLOUD_DISMISS_KEY,String(Date.now()))}catch(e){}}return}
   if(!pw){err='Escreve a palavra-passe.';continue}
   setCloudState('connecting');
-  try{await cloud.fb.signInWithEmailAndPassword(cloud.auth,CLOUD_CFG.email,pw);toast('Dispositivo ligado à base de dados da equipa');return}
-  catch(e){err=AUTH_ERR[e&&e.code]||('Não foi possível ligar ('+(e&&e.code||'erro')+').');setCloudState('login')}
+  cloud.paused=false;
+  if(cloud.fb.enableNetwork)await cloud.fb.enableNetwork(cloud.db).catch(()=>{});
+  const tmo=new Promise((_,rej)=>setTimeout(()=>rej({code:'app/timeout'}),20000));
+  try{await Promise.race([cloud.fb.signInWithEmailAndPassword(cloud.auth,CLOUD_CFG.email,pw),tmo]);toast('Dispositivo ligado à base de dados da equipa');return}
+  catch(e){err=AUTH_ERR[e&&e.code]||('Não foi possível ligar ('+(e&&e.code||'erro')+').');setCloudState(cloud.user?'synced':'login')}
  }
 }
 async function cloudLogout(){
@@ -767,11 +877,11 @@ function cloudInfo(){modal({title:'Base de dados da equipa',body:`<div class="cl
 function startSync(){
  stopSync();
  const F=cloud.fb;
- setCloudState(navigator.onLine===false?'offline':'syncing');
+ setCloudState(navigator.onLine===false?'offline':'syncing');cloud.busySince=Date.now();
  cloud.ready=false;cloud.metaReady=false;
- cloud.unsubMeta=F.onSnapshot(F.collection(cloud.db,'jogos'),snap=>{onMetaSnap(snap);if(!cloud.metaReady){cloud.metaReady=true;listenCurrent();}},onCloudError);
+ cloud.unsubMeta=F.onSnapshot(F.collection(cloud.db,'jogos'),snap=>{cloudProgress(snap);onMetaSnap(snap);if(!cloud.metaReady){cloud.metaReady=true;listenCurrent();}},onCloudError);
  cloud.tactReady=false;
- cloud.unsubTact=F.onSnapshot(F.collection(cloud.db,'taticas'),snap=>{onTactSnap(snap);if(!cloud.tactReady){cloud.tactReady=true;pushTactics()}},onCloudError);
+ cloud.unsubTact=F.onSnapshot(F.collection(cloud.db,'taticas'),snap=>{cloudProgress(snap);onTactSnap(snap);if(!cloud.tactReady){cloud.tactReady=true;pushTactics()}},onCloudError);
 }
 function stopSync(){
  if(cloud.unsubMeta){cloud.unsubMeta();cloud.unsubMeta=null}
@@ -796,7 +906,7 @@ function listenCurrent(){
  const col=F.collection(cloud.db,'jogos',gid,'registos');
  const q=p?F.query(col,F.where('upd','>',new F.Timestamp(p.s,p.n))):col;
  let first=true;
- cloud.unsubRecs=F.onSnapshot(q,snap=>{applyRecSnap(gid,snap.docChanges().map(c=>c.doc));if(first){first=false;cloud.ready=true;pushAll()}},onCloudError);
+ cloud.unsubRecs=F.onSnapshot(q,snap=>{cloudProgress(snap);applyRecSnap(gid,snap.docChanges().map(c=>c.doc));if(first){first=false;cloud.ready=true;pushAll()}},onCloudError);
 }
 function applyRecSnap(gid,docs){
  const g=DB.games[gid];if(!g)return;
@@ -929,22 +1039,24 @@ function pushGame(g,S){
  for(let i=0;i<writes.length;i+=450){
   const b=F.writeBatch(cloud.db);
   writes.slice(i,i+450).forEach(([ref,data,opt])=>opt?b.set(ref,data,opt):b.set(ref,data));
-  cloud.inflight++;
-  b.commit().then(()=>{cloud.inflight--;markSynced()}).catch(e=>{cloud.inflight--;onCloudError(e)});
+  cloudTrack(b.commit());
  }
  S.games[g.id]=d.next;S.pushed[g.id]=g.updated;
  return writes.length;
 }
-function markPending(){if(cloud.user)setCloudState(navigator.onLine===false?'offline':'syncing')}
+function markPending(){if(cloud.user&&!cloud.paused)setCloudState(navigator.onLine===false?'offline':'syncing')}
 function markSynced(){
- if(!cloud.user||cloud.state==='error')return;
+ if(!cloud.user||cloud.state==='error'||cloud.paused)return;
  if(navigator.onLine===false){setCloudState('offline');return}
  if(cloud.inflight>0||!cloud.ready){setCloudState('syncing');return}
  cloud.lastSync=Date.now();setCloudState('synced');
 }
-function cloudSyncNow(){
- if(!cloud.user){cloudLogin();return}
- if(cloud.state==='error')cloud.error='';
+async function cloudSyncNow(){
+ if(!cloud.fb){location.reload();return}          // a ligação ao Firebase nem chegou a carregar: recomeçar
+ const wasPaused=cloud.paused;cloud.paused=false;
+ if(wasPaused&&cloud.fb.enableNetwork)await cloud.fb.enableNetwork(cloud.db).catch(()=>{});
+ if(!cloud.user){setCloudState('login','');cloudLogin();return}
+ cloud.error='';
  setCloudState('syncing');
  const S=syncState();S.pushed={};saveSync(S);   // forçar comparação completa
  startSync();
@@ -956,6 +1068,7 @@ const CLOUD_REFRESH={
  individual:()=>{renderIndForm();renderIndRecords()},
  tempo:()=>{const cp=$('#t-cp');if(!cp||cp.textContent!==G().period+' período'){renderTempo();return}renderTempoSub();renderTempoPlayers();renderTempoLog();updateTempoLive()},
  exclusoes:()=>{renderTeam('scp');renderTeam('opp');renderExLog()},
+ assistencias:()=>renderAssistencias(),
  taticas:()=>{}           // o quadro não depende dos dados do jogo
 };
 let cloudRerenderPending=false;
@@ -1001,8 +1114,8 @@ function pushTactics(){
  const F=cloud.fb,S=syncState(),m=loadTactics();let n=0;
  Object.values(m).forEach(t=>{
   const p=plain(t),h=hashOf(p);if(S.tact[t.id]===h)return;
-  S.tact[t.id]=h;n++;cloud.inflight++;
-  F.setDoc(F.doc(cloud.db,'taticas',t.id),{...p,del:false,upd:F.serverTimestamp()}).then(()=>{cloud.inflight--;markSynced()}).catch(e=>{cloud.inflight--;onCloudError(e)});
+  S.tact[t.id]=h;n++;
+  cloudTrack(F.setDoc(F.doc(cloud.db,'taticas',t.id),{...p,del:false,upd:F.serverTimestamp()}));
  });
  saveSync(S);if(n)markPending();
 }
@@ -1102,14 +1215,14 @@ function makeXlsx(sheets){
 function withGame(g,fn){const keep=DB.currentId;DB.currentId=g.id;try{return fn()}finally{DB.currentId=keep}}
 const xPname=(g,n)=>{const p=g.roster.find(x=>x.n===+n);return p&&p.name?p.name:'Jogador '+n};
 const xEx=(g,t,n)=>((g.excl||{})[t]||{})[n]||{ex:0,red:false,goals:0};
-const xScore=g=>{const s=t=>Object.values((g.excl||{})[t]||{}).reduce((a,x)=>a+(x.goals||0),0);return {scp:s('scp'),opp:s('opp')}};
+const xScore=g=>scoreOf(g);
 const r1=v=>v==null?null:Math.round(v*10)/10;
 const COL_TABLE_TITLE={scp:'Ataque SCP vs Defesa Adversária',other:'Ataque Adversário vs Defesa SCP',plus:'Superioridade SCP (+1)',minus:'Inferioridade SCP (−1)',caSCP:'Contra-ataque SCP',caOther:'Contra-ataque Adversário'};
 const X_SHOTS=['Golo','Defesa','Bloco','Fora'];
 const EXPORT_SHEETS=[
  {name:'Jogos',head:['Competição','Local','Golos SCP','Golos adversário','Duração do período (min)','Registos individuais','Ataques (coletiva)','Entradas/saídas','Bolas de saída ganhas'],
   rows:g=>{const s=xScore(g);return [[g.competition,g.venue,s.scp,s.opp,g.periodLength/60,g.individual.length,g.collective.length,g.timer.events.length,g.sprints.filter(x=>x.winner==='SCP').length]]}},
- {name:'Plantel',head:['Nº','Nome','GR','Posição','Mão'],rows:g=>g.roster.filter(p=>p.n<=13||p.name).map(p=>[p.n,p.name,p.gr?'Sim':'',p.pos||'',p.hand||''])},
+ {name:'Plantel',head:['Nº','Nome','GR','Posição','Mão'],rows:g=>activeRoster(g).map(p=>[p.n,p.name,p.gr?'Sim':'',p.pos||'',p.hand||''])},
  {name:'Individual',head:['Tipo','Período','Nº','Jogador','Ação','Situação','Assistência Nº','Assistência','Zona campo','Distância (m)','Campo X (%)','Campo Y (%)','Zona baliza','Baliza X (%)','Baliza Y (%)','Registado em'],
   rows:g=>g.individual.slice().sort((a,b)=>a.ts-b.ts).map(r=>[r.mode==='gk'?'GR':'Campo',r.period,r.player,xPname(g,r.player),r.action,r.sit,r.assist==='none'||r.assist===''?null:r.assist,r.assist==='none'?'Sem assistência':r.assist?xPname(g,r.assist):'',r.fzone,r.fy!=null?r1(r.fy*12.5):null,r.fx!=null?r1(r.fx*100):null,r.fy!=null?r1(r.fy*100):null,r.gzone,r.gx!=null?r1(r.gx*100):null,r.gy!=null?r1(r.gy*100):null,new Date(r.ts).toLocaleString('pt-PT')])},
  {name:'Coletiva',head:['Tabela','Período','Nº ataque','Jogada ofensiva','Jogada defensiva / Defesa','Sistema +1','Contra-ataque','Posição remate','Outcome','Tempo ATQ','Notas'],
@@ -1120,7 +1233,7 @@ const EXPORT_SHEETS=[
  {name:'Tempo – resumo',head:['Nº','Jogador','GR','Turnos','Último turno','Tempo total','Tempo total (s)'],
   rows:g=>withGame(g,()=>{const s=computeShifts();return g.roster.filter(p=>s[p.n].count||p.name).map(p=>{const x=s[p.n];return [p.n,xPname(g,p.n),p.gr?'Sim':'',x.count,x.count?fmtClock(x.last):'',fmtClock(x.total),Math.round(x.total)]})})},
  {name:'Exclusões',head:['Equipa','Nº','Nome','GR','Exclusões','Cartão vermelho','Golos'],
-  rows:g=>['scp','opp'].flatMap(t=>(t==='scp'?g.roster.slice(0,13):g.oppRoster).map(p=>{const o=xEx(g,t,p.n);return [t==='scp'?'SCP':'Adversário',p.n,p.name,t==='scp'&&p.gr?'Sim':'',o.ex||0,o.red?'Sim':'',o.goals||0]}))},
+  rows:g=>{const sg=scpGoalsByPlayer(g).total;return ['scp','opp'].flatMap(t=>(t==='scp'?activeRoster(g):activeOpp(g)).map(p=>{const o=xEx(g,t,p.n);return [t==='scp'?'SCP':'Adversário',p.n,p.name,t==='scp'&&p.gr?'Sim':'',o.ex||0,o.red?'Sim':'',t==='scp'?(sg[p.n]||0):(o.goals||0)]}))}},
  {name:'Exclusões – registo',head:['Período','Relógio','Equipa','Nº','Jogador','Evento','Hora'],
   rows:g=>g.exclLog.map(e=>[e.period,fmtClock(e.clock),e.team==='scp'?(g.scpName||'Sporting CP'):(g.opponent||'Adversário'),e.n,e.team==='scp'?xPname(g,e.n):((g.oppRoster[e.n-1]||{}).name||'Jogador '+e.n),e.type,new Date(e.ts).toLocaleString('pt-PT')])},
  {name:'Guarda-redes',head:['Nº','Guarda-redes','Remates à baliza','Defesas','Defesas controladas','Defesas para fora','Golos sofridos','Remates fora','% defesas','Tempo jogado'],
@@ -1132,15 +1245,18 @@ const EXPORT_SHEETS=[
    return g.roster.filter(p=>!p.gr).map(p=>{const m=F.filter(r=>r.player===p.n),c=a=>m.filter(r=>r.action===a).length,sh=m.filter(r=>X_SHOTS.includes(r.action)).length,gl=c('Golo'),secs=(s[p.n]||{}).total||0;
     if(!m.length&&!secs&&!F.some(r=>r.assist===p.n))return null;
     return [p.n,xPname(g,p.n),sh,gl,sh?Math.round(gl*100/sh):null,F.filter(r=>r.assist===p.n).length,c('EXC ganha'),c('EXC sofrida'),c('Perda Bola')+c('Passe Falhado')+c('Falta Atacante'),c('Roubo Bola'),c('Bloco Defensivo'),fmtClock(secs),secs>=60?r1(gl*480/secs):null]}).filter(Boolean)})},
+ {name:'Assistências',head:['Nº','Jogador','Assist. golo','Assist. exclusão','Total assistências','Golos','Participação em golos','Marcou com assistência de'],
+  rows:g=>{const A=assistStats([g]);return A.players.filter(p=>p.ag||p.ae||p.goals).sort((a,b)=>(b.ag+b.ae)-(a.ag+a.ae)||a.n-b.n)
+   .map(p=>[p.n,p.name,p.ag,p.ae,p.ag+p.ae,p.goals,p.goals+p.ag,A.pairs.filter(x=>x.to===p).sort((a,b)=>b.v-a.v).map(x=>`${x.from.n} ${x.from.name} (${x.v})`).join(', ')])}},
  {name:'Bolas de saída',head:['Período','Ganhou','Nº','Jogador'],rows:g=>g.sprints.filter(s=>s.winner).map(s=>[s.period,s.winner==='SCP'?'SCP':'Adversário',s.player?+s.player:null,s.player?xPname(g,s.player):''])}
 ];
 /** folhas para um ou vários jogos (vários: colunas Data e Adversário à esquerda) */
 function buildExportSheets(games){
  const many=games.length>1;
  return EXPORT_SHEETS.map(def=>{
-  const head=(many||def.name==='Jogos'?['Data','Adversário']:[]).concat(def.head);
+  const head=(many||def.name==='Jogos'?['Data','Escalão','Adversário']:[]).concat(def.head);
   const rows=[head];
-  games.forEach(g=>def.rows(g).forEach(r=>rows.push((many||def.name==='Jogos'?[fmtDate(g.date),g.opponent]:[]).concat(r))));
+  games.forEach(g=>def.rows(g).forEach(r=>rows.push((many||def.name==='Jogos'?[fmtDate(g.date),g.escalao,g.opponent]:[]).concat(r))));
   return {name:def.name,rows};
  });
 }
@@ -1153,13 +1269,14 @@ function downloadBytes(name,bytes,type){
 /* ---------- os dois botões ---------- */
 async function exportExcel(){
  const g=G(),all=Object.values(DB.games).filter(x=>!x.demo).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
- const choice=await modal({title:'Exportar para Excel',
-  body:`<p>Um ficheiro <b>.xlsx</b> com uma folha para cada tabela: jogos, plantel, estatística individual, coletiva, tempo de jogo, exclusões, guarda-redes, resumo por jogador e bolas de saída.</p><p class="muted small">Com vários jogos, cada linha leva a data e o adversário, para filtrar ou fazer tabelas dinâmicas no Excel.</p>`,
-  actions:[{label:'Cancelar',cls:'btn-ghost',value:null},{label:`Todos os jogos (${all.length})`,cls:'btn-outline',value:'all'},{label:'Jogo aberto',cls:'btn-primary',value:'one'}]});
- if(!choice)return;
- const games=choice==='one'?[g]:all;
+ const res=await modal({title:'Exportar para Excel',
+  body:`<p>Um ficheiro <b>.xlsx</b> com uma folha para cada tabela: jogos, plantel, estatística individual, coletiva, tempo de jogo, exclusões, guarda-redes, resumo por jogador, assistências e bolas de saída.</p><p class="muted small">Com vários jogos, cada linha leva a data, o escalão e o adversário, para filtrar ou fazer tabelas dinâmicas no Excel.</p>
+   <div class="field" style="margin-top:10px"><label for="m-xesc">Escalão (para "Todos os jogos")</label><select id="m-xesc"><option value="">Todos os escalões (${all.length} jogos)</option>${ESCALOES.map(e=>{const n=all.filter(x=>x.escalao===e.id).length;return `<option value="${e.id}" ${n?'':'disabled'}>${e.id} (${n})</option>`}).join('')}</select></div>`,
+  actions:[{label:'Cancelar',cls:'btn-ghost',value:null},{label:'Todos os jogos',cls:'btn-outline',get:r=>({c:'all',esc:r.querySelector('#m-xesc').value})},{label:'Jogo aberto',cls:'btn-primary',value:{c:'one'}}]});
+ if(!res)return;
+ const choice=res.c,games=choice==='one'?[g]:all.filter(x=>!res.esc||x.escalao===res.esc);
  if(!games.length){toast('Ainda não há jogos reais para exportar (os jogos de exemplo não entram em "Todos os jogos").','warn');return}
- const name=choice==='one'?'scp_stat_'+fileStamp()+'.xlsx':'scp_stat_todos_os_jogos_'+todayISO()+'.xlsx';
+ const name=choice==='one'?'scp_stat_'+fileStamp()+'.xlsx':'scp_stat_'+(res.esc?res.esc.replace(/\s+/g,'_')+'_':'todos_os_jogos_')+todayISO()+'.xlsx';
  downloadBytes(name,makeXlsx(buildExportSheets(games)),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
 function backupPayload(){
@@ -1249,15 +1366,20 @@ function buildDemoGame(){
 }
 function exOfG(g,team,n){if(!g.excl[team][n])g.excl[team][n]={ex:0,red:false,goals:0};return g.excl[team][n]}
 
+/* Fim de período: o relógio fica em 0:00 sozinho (clockNow nunca desce abaixo de 0), sem gravar nada.
+   Gravar aqui fazia com que um dispositivo atrasado ou acabado de acordar enviasse para a equipa um relógio
+   antigo parado, por cima do relógio verdadeiro do dispositivo do Tempo de Jogo. */
+let endToastFor='';
 function tick(){
  const g=G();if(!g)return;const t=g.timer;
- if(t.running&&clockNow()<=0){t.remaining=0;t.running=false;save();toast(`Fim do ${g.period} período`,'warn')}
+ const key=g.id+'|'+g.period+'|'+t.startedAt;
+ if(t.running&&clockNow()<=0){if(endToastFor!==key){endToastFor=key;if(currentView==='tempo'||currentView==='inicio')toast(`Fim do ${g.period} período`,'warn')}}
  if(currentView==='tempo')updateTempoLive();
  if(currentView==='inicio'){const el=$('#sb-clock');if(el)el.textContent=fmtClock(clockNow())}
 }
 function init(){
  load();renderHeader();
- $('#demo-new').onclick=()=>{const n=newGame();DB.games[n.id]=n;DB.currentId=n.id;save();resetLocalState();goTo('inicio');toast('Jogo novo criado. Começa por escrever os nomes em Jogadores ou Exclusões.')};
+ $('#demo-new').onclick=()=>{const n=newGame(null,{escalao:DB.settings.lastEscalao});DB.games[n.id]=n;DB.currentId=n.id;save();resetLocalState();goTo('inicio');toast('Jogo novo criado. Começa por escrever os nomes em Jogadores ou Exclusões.')};
  window.addEventListener('hashchange',route);
  /* várias páginas/separadores abertos ao mesmo tempo: manter os dados sincronizados */
  window.addEventListener('storage',e=>{

@@ -2,7 +2,7 @@
    - guarda todos os ficheiros da app no dispositivo (funciona sem internet)
    - guarda as fontes da Google na primeira utilização com rede
    - uma versão nova só é ativada quando o utilizador carrega em "Atualizar agora" */
-const VERSION = '001218d85a';
+const VERSION = 'b9e49b3935';
 const APP_CACHE = 'scp-stat-app-' + VERSION;
 const FONT_CACHE = 'scp-stat-fonts';
 const PRECACHE = [
@@ -10,6 +10,7 @@ const PRECACHE = [
  "index.html",
  "estatistica_individual.html",
  "remates.html",
+ "assistencias.html",
  "jogadores.html",
  "guarda_redes.html",
  "estatistica_coletiva.html",
@@ -23,6 +24,7 @@ const PRECACHE = [
  "javascript/inicio.js",
  "javascript/estatistica_individual.js",
  "javascript/remates.js",
+ "javascript/assistencias.js",
  "javascript/jogadores.js",
  "javascript/guarda_redes.js",
  "javascript/estatistica_coletiva.js",

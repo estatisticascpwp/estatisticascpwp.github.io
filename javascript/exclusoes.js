@@ -1,13 +1,13 @@
 'use strict';
 /* =========================================================
-   EXCLUSÕES — 13 jogadores por equipa, 3 exclusões, vermelho, golos
+   EXCLUSÕES — 14 jogadores por equipa (15 em sub20 e abaixo), 3 exclusões, vermelho, golos
    Os nomes do SCP aqui são o plantel usado em todos os programas.
    ========================================================= */
 function renderExclusoes(){
  const v=$('#view-exclusoes');
  v.innerHTML=`
  <section class="panel">
-  <div class="view-head"><div><h1 class="title">Exclusões</h1><p>E1–E3: toca para marcar cada exclusão (tocar de novo numa marcada desfaz). Golos: toque soma 1; <b>Shift + clique</b> ou toque longo subtrai 1. Os nomes do SCP escritos aqui aparecem na Estatística Individual e no Tempo de Jogo.</p></div>
+  <div class="view-head"><div><h1 class="title">Exclusões</h1><p>E1–E3: toca para marcar cada exclusão (tocar de novo numa marcada desfaz). Golos: toque soma 1; <b>Shift + clique</b> ou toque longo subtrai 1. Os nomes do SCP escritos aqui aparecem na Estatística Individual e no Tempo de Jogo. Os golos do SCP registados na Estatística Individual já contam aqui.</p></div>
    <div class="btn-row"><button type="button" class="btn btn-danger" id="ex-reset">${icon('reset')}Repor contadores</button></div></div>
   <div class="ex-grid"><div id="ex-scp"></div><div id="ex-opp"></div></div>
  </section>
@@ -36,18 +36,23 @@ function renderExclusoes(){
  
  $('#ex-reset').onclick=async()=>{if(!await confirmBox('Repor contadores','Pôr a zero as exclusões, cartões vermelhos e golos das duas equipas? Os nomes mantêm-se.','Repor'))return;const g=G();g.excl={scp:{},opp:{}};g.exclLog=[];save();renderExclusoes();toast('Contadores a zero')};
 }
-function goalStep(key,d){const [t,n]=key.split('|'),o=exOf(t,+n);if(d<0&&o.goals===0)return;o.goals=Math.max(0,o.goals+d);exLog(t,+n,d>0?'Golo':'Golo anulado');save();renderTeam(t);renderExLog()}
+/* golos de um jogador nesta tabela: no SCP conta também a Estatística Individual (fica o maior dos dois, como no resultado) */
+function exGoals(t,n){const o=exOf(t,n);if(t!=='scp')return {eff:o.goals,ind:0};const ind=scpGoalsByPlayer(G()).ind[n]||0;return {eff:Math.max(o.goals,ind),ind}}
+function goalStep(key,d){const [t,n]=key.split('|'),o=exOf(t,+n),{eff,ind}=exGoals(t,+n);
+ if(d<0){if(eff===0)return;if(eff-1<ind){toast(`Este golo está registado na Estatística Individual. Para o tirar, apaga lá o registo de ${exName(t,+n)}.`,'warn');return}o.goals=eff-1}
+ else o.goals=eff+1;
+ exLog(t,+n,d>0?'Golo':'Golo anulado');save();renderTeam(t);renderExLog()}
 function renderTeam(t){
- const g=G(),rows=t==='scp'?g.roster.slice(0,13):g.oppRoster;
- const tot=rows.reduce((a,p)=>{const o=exOf(t,p.n);a.ex+=o.ex;a.goals+=o.goals;a.out+=(o.ex>=3||o.red)?1:0;return a},{ex:0,goals:0,out:0});
+ const g=G(),rows=t==='scp'?activeRoster(g):activeOpp(g);
+ const tot=rows.reduce((a,p)=>{const o=exOf(t,p.n);a.ex+=o.ex;a.goals+=exGoals(t,p.n).eff;a.out+=(o.ex>=3||o.red)?1:0;return a},{ex:0,goals:0,out:0});
  $('#ex-'+t).innerHTML=`<div class="team-card"><div class="team-head ${t}"><input data-team="${t}" value="${esc(t==='scp'?g.scpName:g.opponent)}" aria-label="Nome da equipa"><div class="team-tot"><span><b>${tot.goals}</b>golos</span><span><b>${tot.ex}</b>exclusões</span><span><b>${tot.out}</b>fora</span></div></div>
  <div class="table-wrap" style="border:0;border-radius:0"><table class="ex-table"><thead><tr><th>Nº</th><th class="l">Nome</th>${t==='scp'?'<th>GR</th>':''}<th>Exclusões</th><th title="Cartão vermelho">CV</th><th>Golos</th></tr></thead><tbody>
- ${rows.map(p=>{const o=exOf(t,p.n),out=o.ex>=3||o.red,gk=t==='scp'?p.gr:(p.n===1||p.n===13);return `<tr class="${out?'out':''}"><td><span class="capnum ${gk?'gk':''}">${p.n}</span></td>
+ ${rows.map(p=>{const o=exOf(t,p.n),gl=exGoals(t,p.n),out=o.ex>=3||o.red,gk=t==='scp'?p.gr:(p.n===1||p.n===13);return `<tr class="${out?'out':''}"><td><span class="capnum ${gk?'gk':''}">${p.n}</span></td>
   <td class="l"><input class="inp-sm nm" data-nm="${t}|${p.n}" value="${esc(p.name)}" placeholder="Nome" aria-label="Nome do jogador ${p.n}">${out?`<div><span class="out-tag">${o.red?'CARTÃO VERMELHO':'EXCLUÍDO'}</span></div>`:''}</td>
   ${t==='scp'?`<td><button type="button" class="gk-t ${p.gr?'on':''}" data-gk="${p.n}" title="Marcar como guarda-redes">GR</button></td>`:''}
   <td style="white-space:nowrap">${[1,2,3].map(k=>`<button type="button" class="exb ${o.ex>=k?'on':''}" data-ex="${t}|${p.n}|${k}" aria-label="Exclusão ${k} do jogador ${p.n}">E${k}</button>`).join('')}</td>
   <td><button type="button" class="redb ${o.red?'on':''}" data-red="${t}|${p.n}" aria-label="Cartão vermelho do jogador ${p.n}"></button></td>
-  <td><button type="button" class="goalb ${o.goals?'has':''}" data-goal="${t}|${p.n}" aria-label="Golos do jogador ${p.n}: ${o.goals}">${o.goals}</button></td></tr>`}).join('')}
+  <td><button type="button" class="goalb ${gl.eff?'has':''}" data-goal="${t}|${p.n}" aria-label="Golos do jogador ${p.n}: ${gl.eff}" ${gl.ind?`title="${gl.ind} golo(s) registado(s) na Estatística Individual"`:''}>${gl.eff}</button></td></tr>`}).join('')}
  </tbody></table></div></div>`;
  updateHeader();
 }

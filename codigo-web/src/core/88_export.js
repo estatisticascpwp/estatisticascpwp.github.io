@@ -63,14 +63,14 @@ function makeXlsx(sheets){
 function withGame(g,fn){const keep=DB.currentId;DB.currentId=g.id;try{return fn()}finally{DB.currentId=keep}}
 const xPname=(g,n)=>{const p=g.roster.find(x=>x.n===+n);return p&&p.name?p.name:'Jogador '+n};
 const xEx=(g,t,n)=>((g.excl||{})[t]||{})[n]||{ex:0,red:false,goals:0};
-const xScore=g=>{const s=t=>Object.values((g.excl||{})[t]||{}).reduce((a,x)=>a+(x.goals||0),0);return {scp:s('scp'),opp:s('opp')}};
+const xScore=g=>scoreOf(g);
 const r1=v=>v==null?null:Math.round(v*10)/10;
 const COL_TABLE_TITLE={scp:'Ataque SCP vs Defesa Adversária',other:'Ataque Adversário vs Defesa SCP',plus:'Superioridade SCP (+1)',minus:'Inferioridade SCP (−1)',caSCP:'Contra-ataque SCP',caOther:'Contra-ataque Adversário'};
 const X_SHOTS=['Golo','Defesa','Bloco','Fora'];
 const EXPORT_SHEETS=[
  {name:'Jogos',head:['Competição','Local','Golos SCP','Golos adversário','Duração do período (min)','Registos individuais','Ataques (coletiva)','Entradas/saídas','Bolas de saída ganhas'],
   rows:g=>{const s=xScore(g);return [[g.competition,g.venue,s.scp,s.opp,g.periodLength/60,g.individual.length,g.collective.length,g.timer.events.length,g.sprints.filter(x=>x.winner==='SCP').length]]}},
- {name:'Plantel',head:['Nº','Nome','GR','Posição','Mão'],rows:g=>g.roster.filter(p=>p.n<=13||p.name).map(p=>[p.n,p.name,p.gr?'Sim':'',p.pos||'',p.hand||''])},
+ {name:'Plantel',head:['Nº','Nome','GR','Posição','Mão'],rows:g=>activeRoster(g).map(p=>[p.n,p.name,p.gr?'Sim':'',p.pos||'',p.hand||''])},
  {name:'Individual',head:['Tipo','Período','Nº','Jogador','Ação','Situação','Assistência Nº','Assistência','Zona campo','Distância (m)','Campo X (%)','Campo Y (%)','Zona baliza','Baliza X (%)','Baliza Y (%)','Registado em'],
   rows:g=>g.individual.slice().sort((a,b)=>a.ts-b.ts).map(r=>[r.mode==='gk'?'GR':'Campo',r.period,r.player,xPname(g,r.player),r.action,r.sit,r.assist==='none'||r.assist===''?null:r.assist,r.assist==='none'?'Sem assistência':r.assist?xPname(g,r.assist):'',r.fzone,r.fy!=null?r1(r.fy*12.5):null,r.fx!=null?r1(r.fx*100):null,r.fy!=null?r1(r.fy*100):null,r.gzone,r.gx!=null?r1(r.gx*100):null,r.gy!=null?r1(r.gy*100):null,new Date(r.ts).toLocaleString('pt-PT')])},
  {name:'Coletiva',head:['Tabela','Período','Nº ataque','Jogada ofensiva','Jogada defensiva / Defesa','Sistema +1','Contra-ataque','Posição remate','Outcome','Tempo ATQ','Notas'],
@@ -81,7 +81,7 @@ const EXPORT_SHEETS=[
  {name:'Tempo – resumo',head:['Nº','Jogador','GR','Turnos','Último turno','Tempo total','Tempo total (s)'],
   rows:g=>withGame(g,()=>{const s=computeShifts();return g.roster.filter(p=>s[p.n].count||p.name).map(p=>{const x=s[p.n];return [p.n,xPname(g,p.n),p.gr?'Sim':'',x.count,x.count?fmtClock(x.last):'',fmtClock(x.total),Math.round(x.total)]})})},
  {name:'Exclusões',head:['Equipa','Nº','Nome','GR','Exclusões','Cartão vermelho','Golos'],
-  rows:g=>['scp','opp'].flatMap(t=>(t==='scp'?g.roster.slice(0,13):g.oppRoster).map(p=>{const o=xEx(g,t,p.n);return [t==='scp'?'SCP':'Adversário',p.n,p.name,t==='scp'&&p.gr?'Sim':'',o.ex||0,o.red?'Sim':'',o.goals||0]}))},
+  rows:g=>{const sg=scpGoalsByPlayer(g).total;return ['scp','opp'].flatMap(t=>(t==='scp'?activeRoster(g):activeOpp(g)).map(p=>{const o=xEx(g,t,p.n);return [t==='scp'?'SCP':'Adversário',p.n,p.name,t==='scp'&&p.gr?'Sim':'',o.ex||0,o.red?'Sim':'',t==='scp'?(sg[p.n]||0):(o.goals||0)]}))}},
  {name:'Exclusões – registo',head:['Período','Relógio','Equipa','Nº','Jogador','Evento','Hora'],
   rows:g=>g.exclLog.map(e=>[e.period,fmtClock(e.clock),e.team==='scp'?(g.scpName||'Sporting CP'):(g.opponent||'Adversário'),e.n,e.team==='scp'?xPname(g,e.n):((g.oppRoster[e.n-1]||{}).name||'Jogador '+e.n),e.type,new Date(e.ts).toLocaleString('pt-PT')])},
  {name:'Guarda-redes',head:['Nº','Guarda-redes','Remates à baliza','Defesas','Defesas controladas','Defesas para fora','Golos sofridos','Remates fora','% defesas','Tempo jogado'],
@@ -93,15 +93,18 @@ const EXPORT_SHEETS=[
    return g.roster.filter(p=>!p.gr).map(p=>{const m=F.filter(r=>r.player===p.n),c=a=>m.filter(r=>r.action===a).length,sh=m.filter(r=>X_SHOTS.includes(r.action)).length,gl=c('Golo'),secs=(s[p.n]||{}).total||0;
     if(!m.length&&!secs&&!F.some(r=>r.assist===p.n))return null;
     return [p.n,xPname(g,p.n),sh,gl,sh?Math.round(gl*100/sh):null,F.filter(r=>r.assist===p.n).length,c('EXC ganha'),c('EXC sofrida'),c('Perda Bola')+c('Passe Falhado')+c('Falta Atacante'),c('Roubo Bola'),c('Bloco Defensivo'),fmtClock(secs),secs>=60?r1(gl*480/secs):null]}).filter(Boolean)})},
+ {name:'Assistências',head:['Nº','Jogador','Assist. golo','Assist. exclusão','Total assistências','Golos','Participação em golos','Marcou com assistência de'],
+  rows:g=>{const A=assistStats([g]);return A.players.filter(p=>p.ag||p.ae||p.goals).sort((a,b)=>(b.ag+b.ae)-(a.ag+a.ae)||a.n-b.n)
+   .map(p=>[p.n,p.name,p.ag,p.ae,p.ag+p.ae,p.goals,p.goals+p.ag,A.pairs.filter(x=>x.to===p).sort((a,b)=>b.v-a.v).map(x=>`${x.from.n} ${x.from.name} (${x.v})`).join(', ')])}},
  {name:'Bolas de saída',head:['Período','Ganhou','Nº','Jogador'],rows:g=>g.sprints.filter(s=>s.winner).map(s=>[s.period,s.winner==='SCP'?'SCP':'Adversário',s.player?+s.player:null,s.player?xPname(g,s.player):''])}
 ];
 /** folhas para um ou vários jogos (vários: colunas Data e Adversário à esquerda) */
 function buildExportSheets(games){
  const many=games.length>1;
  return EXPORT_SHEETS.map(def=>{
-  const head=(many||def.name==='Jogos'?['Data','Adversário']:[]).concat(def.head);
+  const head=(many||def.name==='Jogos'?['Data','Escalão','Adversário']:[]).concat(def.head);
   const rows=[head];
-  games.forEach(g=>def.rows(g).forEach(r=>rows.push((many||def.name==='Jogos'?[fmtDate(g.date),g.opponent]:[]).concat(r))));
+  games.forEach(g=>def.rows(g).forEach(r=>rows.push((many||def.name==='Jogos'?[fmtDate(g.date),g.escalao,g.opponent]:[]).concat(r))));
   return {name:def.name,rows};
  });
 }
@@ -114,13 +117,14 @@ function downloadBytes(name,bytes,type){
 /* ---------- os dois botões ---------- */
 async function exportExcel(){
  const g=G(),all=Object.values(DB.games).filter(x=>!x.demo).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
- const choice=await modal({title:'Exportar para Excel',
-  body:`<p>Um ficheiro <b>.xlsx</b> com uma folha para cada tabela: jogos, plantel, estatística individual, coletiva, tempo de jogo, exclusões, guarda-redes, resumo por jogador e bolas de saída.</p><p class="muted small">Com vários jogos, cada linha leva a data e o adversário, para filtrar ou fazer tabelas dinâmicas no Excel.</p>`,
-  actions:[{label:'Cancelar',cls:'btn-ghost',value:null},{label:`Todos os jogos (${all.length})`,cls:'btn-outline',value:'all'},{label:'Jogo aberto',cls:'btn-primary',value:'one'}]});
- if(!choice)return;
- const games=choice==='one'?[g]:all;
+ const res=await modal({title:'Exportar para Excel',
+  body:`<p>Um ficheiro <b>.xlsx</b> com uma folha para cada tabela: jogos, plantel, estatística individual, coletiva, tempo de jogo, exclusões, guarda-redes, resumo por jogador, assistências e bolas de saída.</p><p class="muted small">Com vários jogos, cada linha leva a data, o escalão e o adversário, para filtrar ou fazer tabelas dinâmicas no Excel.</p>
+   <div class="field" style="margin-top:10px"><label for="m-xesc">Escalão (para "Todos os jogos")</label><select id="m-xesc"><option value="">Todos os escalões (${all.length} jogos)</option>${ESCALOES.map(e=>{const n=all.filter(x=>x.escalao===e.id).length;return `<option value="${e.id}" ${n?'':'disabled'}>${e.id} (${n})</option>`}).join('')}</select></div>`,
+  actions:[{label:'Cancelar',cls:'btn-ghost',value:null},{label:'Todos os jogos',cls:'btn-outline',get:r=>({c:'all',esc:r.querySelector('#m-xesc').value})},{label:'Jogo aberto',cls:'btn-primary',value:{c:'one'}}]});
+ if(!res)return;
+ const choice=res.c,games=choice==='one'?[g]:all.filter(x=>!res.esc||x.escalao===res.esc);
  if(!games.length){toast('Ainda não há jogos reais para exportar (os jogos de exemplo não entram em "Todos os jogos").','warn');return}
- const name=choice==='one'?'scp_stat_'+fileStamp()+'.xlsx':'scp_stat_todos_os_jogos_'+todayISO()+'.xlsx';
+ const name=choice==='one'?'scp_stat_'+fileStamp()+'.xlsx':'scp_stat_'+(res.esc?res.esc.replace(/\s+/g,'_')+'_':'todos_os_jogos_')+todayISO()+'.xlsx';
  downloadBytes(name,makeXlsx(buildExportSheets(games)),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
 function backupPayload(){
